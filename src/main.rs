@@ -34,7 +34,7 @@ fn main() {
         "SideStore".to_string(),
         "ALTPairingFile.mobiledevicepairing".to_string(),
     );
-    supported_apps.insert("Feather".to_string(), "pairingFile.plist".to_string());
+    supported_apps.insert("iFeather".to_string(), "pairingFile.plist".to_string());
 
     let app = MyApp {
         devices: None,
