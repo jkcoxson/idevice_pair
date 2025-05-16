@@ -119,23 +119,6 @@ fn main() {
                                     }
                                 };
 
-                                let mut device_info = Vec::with_capacity(5);
-
-                                // Fixed order of fields in reverse order
-                                let fields = [
-                                    ("Device Name", "DeviceName"),
-                                    ("Model", "ProductType"),
-                                    ("iOS Version", "ProductVersion"),
-                                    ("Build Number", "BuildVersion"),
-                                    ("UDID", "UniqueDeviceID"),
-                                ];
-
-                                for (display_name, key) in fields.iter() {
-                                    if let Some(plist::Value::String(value)) = values.get(key) {
-                                        device_info.push((display_name.to_string(), value.clone()));
-                                    }
-                                }
-
                                 // Get device name for selection
                                 let device_name = match values.get("DeviceName") {
                                     Some(plist::Value::String(n)) => n.clone(),
@@ -144,7 +127,6 @@ fn main() {
                                     }
                                 };
                                 selections.insert(device_name, dev);
-                                gui_sender.send(GuiCommands::DeviceInfo(device_info)).unwrap();
                             }
 
                             gui_sender.send(GuiCommands::Devices(selections)).unwrap();
