@@ -598,9 +598,8 @@ impl eframe::App for MyApp {
 
                     // Auto-select logic
                     if !vec.is_empty() {
-                        if vec.len() == 1 || // Single device
-                           self.selected_device.is_empty() || // No device selected
-                           !vec.contains_key(&self.selected_device) // Current selection invalid
+                        if vec.len() == 1 || // Only auto-select if single device
+                           (!vec.contains_key(&self.selected_device) && !self.selected_device.is_empty()) // Or if current selection is invalid but was previously selected
                         {
                             let device_name = vec.keys().next().unwrap().clone();
                             let device = vec.values().next().unwrap().clone();
