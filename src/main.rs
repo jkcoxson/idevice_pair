@@ -565,8 +565,14 @@ struct MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Request device updates periodically
+        if ctx.input(|i| i.time) % 1.0 < 0.1 { // Check every second
+            self.idevice_sender.send(IdeviceCommands::GetDevices).unwrap();
+        }
+
         // Get updates from the idevice thread
-        match self.gui_recv.try_recv() {            Ok(msg) => match msg {
+        match self.gui_recv.try_recv() {
+            Ok(msg) => match msg {
                 GuiCommands::NoUsbmuxd(idevice_error) => {
                     let install_msg = if cfg!(windows) {
                         "Make sure you have iTunes installed from Apple's website, and that it's running."
@@ -580,7 +586,29 @@ impl eframe::App for MyApp {
                         "Failed to connect to usbmuxd! {install_msg}\n\n{idevice_error:#?}"
                     );
                 }
-                GuiCommands::Devices(vec) => self.devices = Some(vec),
+                GuiCommands::Devices(vec) => {
+                    // Helper function to initialize a newly selected device
+                    let select_device = |this: &mut MyApp, name: String, device: UsbmuxdDevice| {
+                        this.initialize_device_info(&device);
+                        this.idevice_sender
+                            .send(IdeviceCommands::GetDeviceInfo(device.clone()))
+                            .unwrap();
+                        this.selected_device = name;
+                    };
+
+                    // Auto-select logic
+                    if !vec.is_empty() {
+                        if vec.len() == 1 || // Single device
+                           self.selected_device.is_empty() || // No device selected
+                           !vec.contains_key(&self.selected_device) // Current selection invalid
+                        {
+                            let device_name = vec.keys().next().unwrap().clone();
+                            let device = vec.values().next().unwrap().clone();
+                            select_device(self, device_name, device);
+                        }
+                    }
+                    self.devices = Some(vec);
+                },
                 GuiCommands::DeviceInfo(info) => self.device_info = Some(info),
                 GuiCommands::GetDevicesFailure(idevice_error) => {
                     self.devices_placeholder = format!(
@@ -663,49 +691,33 @@ impl eframe::App for MyApp {
                         if devs.is_empty() {
                             ui.label("No devices connected! Plug one in via USB.");
                         } else {
+                            let mut new_selection = self.selected_device.clone();
+                            let mut device_to_init = None;
+                            
                             ui.horizontal(|ui| {
                                 ui.vertical(|ui| {
                                     ui.label("Choose a device");
                                     ComboBox::from_label("")
                                         .selected_text(&self.selected_device)
                                         .show_ui(ui, |ui| {
-                                            for (dev_name, dev) in devs {
+                                            // Get sorted device names
+                                            let mut device_names: Vec<_> = devs.keys().collect();
+                                            device_names.sort();
+
+                                            for dev_name in device_names {
                                                 if ui
                                                     .selectable_value(
-                                                        &mut self.selected_device,
+                                                        &mut new_selection,
                                                         dev_name.clone(),
                                                         dev_name.clone(),
                                                     )
                                                     .clicked()
                                                 {
-                                                    // Get device info immediately
-                                                    self.wireless_enabled = None;
-                                                    self.dev_mode_enabled = None;
-                                                    self.ddi_mounted = None;
-                                                    self.device_info = None;
-
-                                                    // Send all device info requests
-                                                    let dev_clone = dev.clone();
-                                                    self.idevice_sender
-                                                        .send(IdeviceCommands::EnableWireless(dev_clone.clone()))
-                                                        .unwrap();
-                                                    self.idevice_sender
-                                                        .send(IdeviceCommands::CheckDevMode(dev_clone.clone()))
-                                                        .unwrap();
-                                                    self.idevice_sender
-                                                        .send(IdeviceCommands::AutoMount(dev_clone.clone()))
-                                                        .unwrap();
-                                                    self.idevice_sender
-                                                        .send(IdeviceCommands::GetDeviceInfo(dev_clone))
-                                                        .unwrap();self.pairing_file = None;
-                                                    self.pairing_file_message = None;
-                                                    self.pairing_file_string = None;
-                                                    self.installed_apps = None;
-                                                    self.device_info = None;
-                                                    self.idevice_sender.send(IdeviceCommands::InstalledApps((dev.clone(), self.supported_apps.keys().map(|x| x.to_owned()).collect()))).unwrap();
-                                                    self.validating = false;
-                                                    self.validate_res = None;
-                                                };
+                                                    // Store the device to initialize after the UI code
+                                                    if let Some(dev) = devs.get(dev_name) {
+                                                        device_to_init = Some(dev.clone());
+                                                    }
+                                                }
                                             }
                                         });
                                     if ui.button("Refresh...").clicked() {
@@ -729,6 +741,12 @@ impl eframe::App for MyApp {
                                     });
                                 }
                             });
+
+                            // Apply the device selection and initialization after the UI code
+                            if let Some(dev) = device_to_init {
+                                self.selected_device = new_selection;
+                                self.initialize_device_info(&dev);
+                            }
                         }
                     }
                     None => {
@@ -907,5 +925,34 @@ impl eframe::App for MyApp {
                 }
             });
         });
+    }
+}
+
+impl MyApp {
+    fn initialize_device_info(&mut self, dev: &UsbmuxdDevice) {
+        self.wireless_enabled = None;
+        self.idevice_sender
+            .send(IdeviceCommands::EnableWireless(dev.clone()))
+            .unwrap();
+        self.dev_mode_enabled = None;
+        self.idevice_sender
+            .send(IdeviceCommands::CheckDevMode(dev.clone()))
+            .unwrap();
+        self.ddi_mounted = None;
+        self.idevice_sender
+            .send(IdeviceCommands::AutoMount(dev.clone()))
+            .unwrap();
+        self.pairing_file = None;
+        self.pairing_file_message = None;
+        self.pairing_file_string = None;
+        self.installed_apps = None;
+        self.idevice_sender
+            .send(IdeviceCommands::InstalledApps((
+                dev.clone(),
+                self.supported_apps.keys().map(|x| x.to_owned()).collect(),
+            )))
+            .unwrap();
+        self.validating = false;
+        self.validate_res = None;
     }
 }
