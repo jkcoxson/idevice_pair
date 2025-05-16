@@ -131,7 +131,7 @@ fn main() {
                                 ];
 
                                 for (display_name, key) in fields.iter() {
-                                    if let Some(plist::Value::String(value)) = values.get(*key) {
+                                    if let Some(plist::Value::String(value)) = values.get(key) {
                                         device_info.push((display_name.to_string(), value.clone()));
                                     }
                                 }
@@ -490,7 +490,7 @@ fn main() {
                     };
 
                     let mut device_info = Vec::with_capacity(5);
-                    
+
                     // Fixed order of fields in reverse order
                     let fields = [
                         ("Device Name", "DeviceName"),
@@ -501,7 +501,7 @@ fn main() {
                     ];
 
                     for (display_name, key) in fields.iter() {
-                        if let Some(plist::Value::String(value)) = values.get(*key) {
+                        if let Some(plist::Value::String(value)) = values.get(key) {
                             device_info.push((display_name.to_string(), value.clone()));
                         }
                     }
