@@ -1,5 +1,6 @@
 name: Rust Cross-Platform Builds
 
+# Trigger configuration
 on:
   push:
     branches: ["master"]
@@ -12,6 +13,7 @@ on:
         required: false
         default: '1.0.0'
 
+# Global environment variables
 env:
   BINARY_NAME: idevice_pair
   APP_NAME: iDevicePair
@@ -20,7 +22,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # 1) Build AppImage for Linux
+  # Linux builds
   build-appimage:
     name: Build & Upload AppImage (Linux ${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
@@ -39,26 +41,15 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Cache Cargo registry & build artifacts
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/index
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ matrix.target }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
-            ${{ runner.os }}-cargo-
-
-      - name: Set up Rust
+      # Build setup
+      - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           components: rustfmt, clippy
           target: ${{ matrix.target }}
 
-      - name: Install build dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -70,9 +61,9 @@ jobs:
             appstream \
             usbmuxd
 
-      - name: Build native binary
-        run: |
-          cargo build --release --bin ${{ env.BINARY_NAME }} --target ${{ matrix.target }}
+      # Build and package
+      - name: Build binary
+        run: cargo build --release --bin ${{ env.BINARY_NAME }} --target ${{ matrix.target }}
 
       - name: Download appimagetool
         run: |
@@ -111,7 +102,7 @@ jobs:
           name: ${{ env.APP_NAME }}-${{ env.VERSION }}-linux-${{ matrix.arch }}.AppImage
           path: ${{ env.APP_NAME }}-${{ env.VERSION }}-linux-${{ matrix.arch }}.AppImage
 
-  # 2) Build macOS slices
+  # macOS builds
   macos-universal:
     name: Build macOS slices
     runs-on: macos-latest
@@ -249,23 +240,12 @@ jobs:
           path: dist/${{ env.APP_NAME }}-${{ env.VERSION }}-macos-universal.dmg
 
 
-  # 5) Build & Upload Windows .exe
+  # Windows build
   build-windows:
-    name: Build & Upload Windows .exe
+    name: Build Windows x64
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Cache Cargo registry & build artifacts
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/index
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-x86_64-pc-windows-msvc
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
-            ${{ runner.os }}-cargo-
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
