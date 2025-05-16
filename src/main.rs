@@ -565,8 +565,14 @@ struct MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Request device updates periodically
+        if ctx.input(|i| i.time) % 1.0 < 0.1 { // Check every second
+            self.idevice_sender.send(IdeviceCommands::GetDevices).unwrap();
+        }
+
         // Get updates from the idevice thread
-        match self.gui_recv.try_recv() {            Ok(msg) => match msg {
+        match self.gui_recv.try_recv() {
+            Ok(msg) => match msg {
                 GuiCommands::NoUsbmuxd(idevice_error) => {
                     let install_msg = if cfg!(windows) {
                         "Make sure you have iTunes installed from Apple's website, and that it's running."
@@ -580,7 +586,36 @@ impl eframe::App for MyApp {
                         "Failed to connect to usbmuxd! {install_msg}\n\n{idevice_error:#?}"
                     );
                 }
-                GuiCommands::Devices(vec) => self.devices = Some(vec),
+                GuiCommands::Devices(vec) => {
+                    // Auto-select if only one device and none selected
+                    if vec.len() == 1 && self.selected_device.is_empty() {
+                        let device_name = vec.keys().next().unwrap().clone();
+                        let device = vec.values().next().unwrap().clone();
+                        
+                        // Initialize device state
+                        self.wireless_enabled = None;
+                        self.dev_mode_enabled = None;
+                        self.ddi_mounted = None;
+                        self.device_info = None;
+
+                        // Send all device info requests
+                        let dev_clone = device.clone();
+                        self.idevice_sender.send(IdeviceCommands::EnableWireless(dev_clone.clone())).unwrap();
+                        self.idevice_sender.send(IdeviceCommands::CheckDevMode(dev_clone.clone())).unwrap();
+                        self.idevice_sender.send(IdeviceCommands::AutoMount(dev_clone.clone())).unwrap();
+                        self.idevice_sender.send(IdeviceCommands::GetDeviceInfo(dev_clone)).unwrap();
+                        self.pairing_file = None;
+                        self.pairing_file_message = None;
+                        self.pairing_file_string = None;
+                        self.installed_apps = None;
+                        self.idevice_sender.send(IdeviceCommands::InstalledApps((device, self.supported_apps.keys().map(|x| x.to_owned()).collect()))).unwrap();
+                        self.validating = false;
+                        self.validate_res = None;
+                        
+                        self.selected_device = device_name;
+                    }
+                    self.devices = Some(vec);
+                },
                 GuiCommands::DeviceInfo(info) => self.device_info = Some(info),
                 GuiCommands::GetDevicesFailure(idevice_error) => {
                     self.devices_placeholder = format!(
@@ -669,7 +704,12 @@ impl eframe::App for MyApp {
                                     ComboBox::from_label("")
                                         .selected_text(&self.selected_device)
                                         .show_ui(ui, |ui| {
-                                            for (dev_name, dev) in devs {
+                                            // Get sorted device names
+                                            let mut device_names: Vec<_> = devs.keys().collect();
+                                            device_names.sort();
+
+                                            for dev_name in device_names {
+                                                let dev = &devs[dev_name];
                                                 if ui
                                                     .selectable_value(
                                                         &mut self.selected_device,
