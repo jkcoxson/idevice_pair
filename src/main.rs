@@ -407,7 +407,7 @@ fn main() {
                         }
                     };
 
-                    let mut ac = match hc.vend_container(bundle_id).await {
+                    let mut ac = match hc.vend_documents(bundle_id).await {
                         Ok(a) => a,
                         Err(e) => {
                             gui_sender
