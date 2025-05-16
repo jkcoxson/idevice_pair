@@ -593,25 +593,8 @@ impl eframe::App for MyApp {
                         let device = vec.values().next().unwrap().clone();
                         
                         // Initialize device state
-                        self.wireless_enabled = None;
-                        self.dev_mode_enabled = None;
-                        self.ddi_mounted = None;
-                        self.device_info = None;
+                        self.initialize_device_info(&device);
 
-                        // Send all device info requests
-                        let dev_clone = device.clone();
-                        self.idevice_sender.send(IdeviceCommands::EnableWireless(dev_clone.clone())).unwrap();
-                        self.idevice_sender.send(IdeviceCommands::CheckDevMode(dev_clone.clone())).unwrap();
-                        self.idevice_sender.send(IdeviceCommands::AutoMount(dev_clone.clone())).unwrap();
-                        self.idevice_sender.send(IdeviceCommands::GetDeviceInfo(dev_clone)).unwrap();
-                        self.pairing_file = None;
-                        self.pairing_file_message = None;
-                        self.pairing_file_string = None;
-                        self.installed_apps = None;
-                        self.idevice_sender.send(IdeviceCommands::InstalledApps((device, self.supported_apps.keys().map(|x| x.to_owned()).collect()))).unwrap();
-                        self.validating = false;
-                        self.validate_res = None;
-                        
                         self.selected_device = device_name;
                     }
                     self.devices = Some(vec);
@@ -719,32 +702,7 @@ impl eframe::App for MyApp {
                                                     .clicked()
                                                 {
                                                     // Get device info immediately
-                                                    self.wireless_enabled = None;
-                                                    self.dev_mode_enabled = None;
-                                                    self.ddi_mounted = None;
-                                                    self.device_info = None;
-
-                                                    // Send all device info requests
-                                                    let dev_clone = dev.clone();
-                                                    self.idevice_sender
-                                                        .send(IdeviceCommands::EnableWireless(dev_clone.clone()))
-                                                        .unwrap();
-                                                    self.idevice_sender
-                                                        .send(IdeviceCommands::CheckDevMode(dev_clone.clone()))
-                                                        .unwrap();
-                                                    self.idevice_sender
-                                                        .send(IdeviceCommands::AutoMount(dev_clone.clone()))
-                                                        .unwrap();
-                                                    self.idevice_sender
-                                                        .send(IdeviceCommands::GetDeviceInfo(dev_clone))
-                                                        .unwrap();self.pairing_file = None;
-                                                    self.pairing_file_message = None;
-                                                    self.pairing_file_string = None;
-                                                    self.installed_apps = None;
-                                                    self.device_info = None;
-                                                    self.idevice_sender.send(IdeviceCommands::InstalledApps((dev.clone(), self.supported_apps.keys().map(|x| x.to_owned()).collect()))).unwrap();
-                                                    self.validating = false;
-                                                    self.validate_res = None;
+                                                    self.initialize_device_info(dev);
                                                 };
                                             }
                                         });
@@ -947,5 +905,31 @@ impl eframe::App for MyApp {
                 }
             });
         });
+    }
+}
+
+impl MyApp {
+    fn initialize_device_info(&mut self, dev: &UsbmuxdDevice) {
+        self.wireless_enabled = None;
+        self.dev_mode_enabled = None;
+        self.ddi_mounted = None;
+        self.device_info = None;
+
+        // Send all device info requests
+        let dev_clone = dev.clone();
+        self.idevice_sender.send(IdeviceCommands::EnableWireless(dev_clone.clone())).unwrap();
+        self.idevice_sender.send(IdeviceCommands::CheckDevMode(dev_clone.clone())).unwrap();
+        self.idevice_sender.send(IdeviceCommands::AutoMount(dev_clone.clone())).unwrap();
+        self.idevice_sender.send(IdeviceCommands::GetDeviceInfo(dev_clone)).unwrap();
+        self.pairing_file = None;
+        self.pairing_file_message = None;
+        self.pairing_file_string = None;
+        self.installed_apps = None;
+        self.idevice_sender.send(IdeviceCommands::InstalledApps((
+            dev.clone(),
+            self.supported_apps.keys().map(|x| x.to_owned()).collect(),
+        ))).unwrap();
+        self.validating = false;
+        self.validate_res = None;
     }
 }
