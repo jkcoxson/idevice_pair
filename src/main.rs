@@ -110,24 +110,25 @@ fn main() {
                                         error!("Failed to connect to lockdown: {e:?}");
                                         continue;
                                     }
-                                };                    let values = match lc.get_all_values().await {
-                        Ok(v) => v,
-                        Err(e) => {
-                            error!("Failed to get lockdown values: {e:?}");
-                            continue;
-                        }
-                    };
+                                };
+                                let values = match lc.get_all_values().await {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        error!("Failed to get lockdown values: {e:?}");
+                                        continue;
+                                    }
+                                };
 
-                    let mut device_info = Vec::with_capacity(5);
-                    
-                    // Fixed order of fields in reverse order
-                    let fields = [
-                        ("Device Name", "DeviceName"),
-                        ("Model", "ProductType"),
-                        ("iOS Version", "ProductVersion"),
-                        ("Build Number", "BuildVersion"),
-                        ("UDID", "UniqueDeviceID"),
-                    ];
+                                let mut device_info = Vec::with_capacity(5);
+
+                                // Fixed order of fields in reverse order
+                                let fields = [
+                                    ("Device Name", "DeviceName"),
+                                    ("Model", "ProductType"),
+                                    ("iOS Version", "ProductVersion"),
+                                    ("Build Number", "BuildVersion"),
+                                    ("UDID", "UniqueDeviceID"),
+                                ];
 
                                 for (display_name, key) in fields.iter() {
                                     if let Some(plist::Value::String(value)) = values.get(*key) {
