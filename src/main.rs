@@ -407,7 +407,7 @@ fn main() {
                         }
                     };
 
-                    let mut ac = match hc.vend_container(bundle_id).await {
+                    let mut ac = match hc.vend_documents(bundle_id).await {
                         Ok(a) => a,
                         Err(e) => {
                             gui_sender
@@ -522,11 +522,8 @@ struct MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Add periodic device checks
-        ctx.request_repaint_after(std::time::Duration::from_secs(2));
-        
-        // Auto-refresh devices if none are present
-        if self.devices.is_none() || self.devices.as_ref().map(|d| d.is_empty()).unwrap_or(true) {
+        // Request device updates periodically
+        if ctx.input(|i| i.time) % 2.0 < 0.1 { // Check every 2 seconds
             self.idevice_sender.send(IdeviceCommands::GetDevices).unwrap();
         }
 
@@ -547,30 +544,30 @@ impl eframe::App for MyApp {
                     );
                 }
                 GuiCommands::Devices(vec) => {
-                    self.devices = Some(vec.clone());
-                    // Auto-select if there's only one device and nothing is selected
-                    if self.selected_device.is_empty() && vec.len() == 1 {
-                        let dev_name = vec.keys().next().unwrap().clone();
-                        let dev = vec.values().next().unwrap().clone();
-                        self.selected_device = dev_name;
+                    // Auto-select if only one device and none selected
+                    if vec.len() == 1 && self.selected_device.is_empty() {
+                        let device_name = vec.keys().next().unwrap().clone();
+                        let device = vec.values().next().unwrap().clone();
                         
-                        // Initialize device info
+                        // Initialize device state
                         self.wireless_enabled = None;
-                        self.idevice_sender.send(IdeviceCommands::EnableWireless(dev.clone())).unwrap();
+                        self.idevice_sender.send(IdeviceCommands::EnableWireless(device.clone())).unwrap();
                         self.dev_mode_enabled = None;
-                        self.idevice_sender.send(IdeviceCommands::CheckDevMode(dev.clone())).unwrap();
+                        self.idevice_sender.send(IdeviceCommands::CheckDevMode(device.clone())).unwrap();
                         self.ddi_mounted = None;
-                        self.idevice_sender.send(IdeviceCommands::AutoMount(dev.clone())).unwrap();
+                        self.idevice_sender.send(IdeviceCommands::AutoMount(device.clone())).unwrap();
                         self.pairing_file = None;
                         self.pairing_file_message = None;
                         self.pairing_file_string = None;
                         self.installed_apps = None;
-                        self.idevice_sender.send(IdeviceCommands::InstalledApps((
-                            dev.clone(),
-                            self.supported_apps.keys().map(|x| x.to_owned()).collect()
-                        ))).unwrap();
+                        self.idevice_sender.send(IdeviceCommands::InstalledApps((device, self.supported_apps.keys().map(|x| x.to_owned()).collect()))).unwrap();
+                        self.validating = false;
+                        self.validate_res = None;
+                        
+                        self.selected_device = device_name;
                     }
-                }
+                    self.devices = Some(vec);
+                },
                 GuiCommands::GetDevicesFailure(idevice_error) => {
                     self.devices_placeholder = format!(
                         "Failed to get list of connected devices from usbmuxd! {idevice_error:?}"
