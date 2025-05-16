@@ -680,75 +680,86 @@ impl eframe::App for MyApp {
                         if devs.is_empty() {
                             ui.label("No devices connected! Plug one in via USB.");
                         } else {
-                            ui.label("Choose a device");
-                            ComboBox::from_label("")
-                                .selected_text(&self.selected_device)
-                                .show_ui(ui, |ui| {
-                                    for (dev_name, dev) in devs {                                        if ui
-                                            .selectable_value(
-                                                &mut self.selected_device,
-                                                dev_name.clone(),
-                                                dev_name.clone(),
-                                            )
-                                            .clicked()
-                                        {
-                                            // Get device info immediately
-                                            self.wireless_enabled = None;
-                                            self.dev_mode_enabled = None;
-                                            self.ddi_mounted = None;
-                                            self.device_info = None;
+                            ui.horizontal(|ui| {
+                                ui.vertical(|ui| {
+                                    ui.label("Choose a device");
+                                    ComboBox::from_label("")
+                                        .selected_text(&self.selected_device)
+                                        .show_ui(ui, |ui| {
+                                            for (dev_name, dev) in devs {
+                                                if ui
+                                                    .selectable_value(
+                                                        &mut self.selected_device,
+                                                        dev_name.clone(),
+                                                        dev_name.clone(),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    // Get device info immediately
+                                                    self.wireless_enabled = None;
+                                                    self.dev_mode_enabled = None;
+                                                    self.ddi_mounted = None;
+                                                    self.device_info = None;
 
-                                            // Send all device info requests
-                                            let dev_clone = dev.clone();
-                                            self.idevice_sender
-                                                .send(IdeviceCommands::EnableWireless(dev_clone.clone()))
-                                                .unwrap();
-                                            self.idevice_sender
-                                                .send(IdeviceCommands::CheckDevMode(dev_clone.clone()))
-                                                .unwrap();
-                                            self.idevice_sender
-                                                .send(IdeviceCommands::AutoMount(dev_clone.clone()))
-                                                .unwrap();
-                                            self.idevice_sender
-                                                .send(IdeviceCommands::GetDeviceInfo(dev_clone))
-                                                .unwrap();self.pairing_file = None;
-                                            self.pairing_file_message = None;
-                                            self.pairing_file_string = None;
-                                            self.installed_apps = None;
-                                            self.device_info = None;
-                                            self.idevice_sender.send(IdeviceCommands::InstalledApps((dev.clone(), self.supported_apps.keys().map(|x| x.to_owned()).collect()))).unwrap();
-                                            self.validating = false;
-                                            self.validate_res = None;
-                                        };
+                                                    // Send all device info requests
+                                                    let dev_clone = dev.clone();
+                                                    self.idevice_sender
+                                                        .send(IdeviceCommands::EnableWireless(dev_clone.clone()))
+                                                        .unwrap();
+                                                    self.idevice_sender
+                                                        .send(IdeviceCommands::CheckDevMode(dev_clone.clone()))
+                                                        .unwrap();
+                                                    self.idevice_sender
+                                                        .send(IdeviceCommands::AutoMount(dev_clone.clone()))
+                                                        .unwrap();
+                                                    self.idevice_sender
+                                                        .send(IdeviceCommands::GetDeviceInfo(dev_clone))
+                                                        .unwrap();self.pairing_file = None;
+                                                    self.pairing_file_message = None;
+                                                    self.pairing_file_string = None;
+                                                    self.installed_apps = None;
+                                                    self.device_info = None;
+                                                    self.idevice_sender.send(IdeviceCommands::InstalledApps((dev.clone(), self.supported_apps.keys().map(|x| x.to_owned()).collect()))).unwrap();
+                                                    self.validating = false;
+                                                    self.validate_res = None;
+                                                };
+                                            }
+                                        });
+                                    if ui.button("Refresh...").clicked() {
+                                        self.idevice_sender
+                                            .send(IdeviceCommands::GetDevices)
+                                            .unwrap();
                                     }
                                 });
+                                
+                                ui.separator();
+
+                                // Show device info to the right if available
+                                if let Some(info) = &self.device_info {
+                                    ui.vertical(|ui| {
+                                        for (key, value) in info {
+                                            ui.horizontal(|ui| {
+                                                ui.label(format!("{}:", key));
+                                                ui.label(value);
+                                            });
+                                        }
+                                    });
+                                }
+                            });
                         }
                     }
                     None => {
                         ui.label(&self.devices_placeholder);
                     }
                 }
-                if ui.button("Refresh...").clicked() {
-                    self.idevice_sender
-                        .send(IdeviceCommands::GetDevices)
-                        .unwrap();
-                }
 
-                ui.separator();                if let Some(dev) = self
+                ui.separator();
+
+                if let Some(dev) = self
                     .devices
                     .as_ref()
                     .and_then(|x| x.get(&self.selected_device))
-                {                    // Display device info and status
-                    if let Some(info) = &self.device_info {
-                        for (key, value) in info {
-                            ui.horizontal(|ui| {
-                                ui.label(format!("{}:", key));
-                                ui.label(value);
-                            });
-                        }
-                        ui.separator();
-                    }
-
+                {
                     ui.horizontal(|ui| {
                         ui.label("Wireless Debugging:");
                         match &self.wireless_enabled {
