@@ -61,6 +61,7 @@ fn main() {
         gui_recv,
         idevice_sender: idevice_sender.clone(),
         show_logs: false,
+        show_logs_window: false,
     };
 
     let d = eframe::icon_data::from_png_bytes(include_bytes!("../icon.png"))
@@ -561,6 +562,7 @@ struct MyApp {
     idevice_sender: UnboundedSender<IdeviceCommands>,
 
     show_logs: bool,
+    show_logs_window: bool,
 }
 
 impl eframe::App for MyApp {
@@ -625,26 +627,32 @@ impl eframe::App for MyApp {
             },
         }
         if self.show_logs {
-            egui::Window::new("logs").show(ctx, |ui| {
-                egui_logger::logger_ui()
-                    .warn_color(Color32::BLACK) // the yellow is too bright in dark mode
-                    .log_levels([true, true, true, true, false])
-                    .enable_category("idevice".to_string(), true)
-                    // there should be a way to set default false...
-                    .enable_category("mdns::mdns".to_string(), false)
-                    .enable_category("eframe".to_string(), false)
-                    .enable_category("eframe::native::glow_integration".to_string(), false)
-                    .enable_category("egui_glow::shader_version".to_string(), false)
-                    .enable_category("egui_glow::vao".to_string(), false)
-                    .enable_category("egui_glow::painter".to_string(), false)
-                    .enable_category("rustls::client::hs".to_string(), false)
-                    .enable_category("rustls::client::tls12".to_string(), false)
-                    .enable_category("rustls::client::common".to_string(), false)
-                    .enable_category("idevice_pair::discover".to_string(), false)
-                    .enable_category("reqwest::connect".to_string(), false)
-                    .show(ui);
-            });
+            self.show_logs_window = true;
         }
+        if self.show_logs_window {
+            egui::Window::new("logs")
+                .open(&mut self.show_logs_window)
+                .show(ctx, |ui| {
+                    egui_logger::logger_ui()
+                        .warn_color(Color32::BLACK) // the yellow is too bright in dark mode
+                        .log_levels([true, true, true, true, false])
+                        .enable_category("idevice".to_string(), true)
+                        // there should be a way to set default false...
+                        .enable_category("mdns::mdns".to_string(), false)
+                        .enable_category("eframe".to_string(), false)
+                        .enable_category("eframe::native::glow_integration".to_string(), false)
+                        .enable_category("egui_glow::shader_version".to_string(), false)
+                        .enable_category("egui_glow::vao".to_string(), false)
+                        .enable_category("egui_glow::painter".to_string(), false)
+                        .enable_category("rustls::client::hs".to_string(), false)
+                        .enable_category("rustls::client::tls12".to_string(), false)
+                        .enable_category("rustls::client::common".to_string(), false)
+                        .enable_category("idevice_pair::discover".to_string(), false)
+                        .enable_category("reqwest::connect".to_string(), false)
+                        .show(ui);
+                });
+        }
+        self.show_logs = self.show_logs_window;
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.horizontal(|ui| {
