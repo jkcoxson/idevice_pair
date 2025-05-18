@@ -61,7 +61,6 @@ fn main() {
         gui_recv,
         idevice_sender: idevice_sender.clone(),
         show_logs: false,
-        show_logs_window: false,
     };
 
     let d = eframe::icon_data::from_png_bytes(include_bytes!("../icon.png"))
@@ -562,7 +561,6 @@ struct MyApp {
     idevice_sender: UnboundedSender<IdeviceCommands>,
 
     show_logs: bool,
-    show_logs_window: bool,
 }
 
 impl eframe::App for MyApp {
@@ -627,11 +625,8 @@ impl eframe::App for MyApp {
             },
         }
         if self.show_logs {
-            self.show_logs_window = true;
-        }
-        if self.show_logs_window {
             egui::Window::new("logs")
-                .open(&mut self.show_logs_window)
+                .open(&mut self.show_logs)
                 .show(ctx, |ui| {
                     egui_logger::logger_ui()
                         .warn_color(Color32::BLACK) // the yellow is too bright in dark mode
@@ -652,7 +647,6 @@ impl eframe::App for MyApp {
                         .show(ui);
                 });
         }
-        self.show_logs = self.show_logs_window;
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.horizontal(|ui| {
