@@ -567,12 +567,10 @@ struct MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Request device updates every second instead of every 2 seconds
         if ctx.input(|i| i.time) % 1.0 < 0.1 {
             self.idevice_sender.send(IdeviceCommands::GetDevices).unwrap();
         }
 
-        // Get updates from the idevice thread
         match self.gui_recv.try_recv() {            Ok(msg) => match msg {
                 GuiCommands::NoUsbmuxd(idevice_error) => {
                     let install_msg = if cfg!(windows) {
