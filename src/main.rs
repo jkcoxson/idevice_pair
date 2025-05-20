@@ -685,7 +685,11 @@ impl eframe::App for MyApp {
                                     ComboBox::from_label("")
                                         .selected_text(&self.selected_device)
                                         .show_ui(ui, |ui| {
-                                            for (dev_name, dev) in devs {
+                                            // Create sorted vec of (name, device) pairs
+                                            let mut sorted_devices: Vec<_> = devs.iter().collect();
+                                            sorted_devices.sort_by(|a, b| a.0.cmp(b.0));
+                                            
+                                            for (dev_name, dev) in sorted_devices {
                                                 if ui
                                                     .selectable_value(
                                                         &mut self.selected_device,
