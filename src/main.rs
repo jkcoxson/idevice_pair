@@ -40,6 +40,7 @@ fn main() {
     supported_apps.insert("Feather".to_string(), "pairingFile.plist".to_string());
     supported_apps.insert("StikDebug".to_string(), "pairingFile.plist".to_string());
     supported_apps.insert("Protokolle".to_string(), "pairingFile.plist".to_string());
+    supported_apps.insert("Antrag".to_string(), "pairingFile.plist".to_string());
 
     let app = MyApp {
         devices: None,
