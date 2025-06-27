@@ -569,7 +569,10 @@ struct MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Get updates from the idevice thread
+        if ctx.input(|i| i.time) % 1.0 < 0.1 {
+            self.idevice_sender.send(IdeviceCommands::GetDevices).unwrap();
+        }
+
         match self.gui_recv.try_recv() {            Ok(msg) => match msg {
                 GuiCommands::NoUsbmuxd(idevice_error) => {
                     let install_msg = if cfg!(windows) {
@@ -583,8 +586,17 @@ impl eframe::App for MyApp {
                     self.devices_placeholder = format!(
                         "Failed to connect to usbmuxd! {install_msg}\n\n{idevice_error:#?}"
                     );
-                }
-                GuiCommands::Devices(vec) => self.devices = Some(vec),
+                },
+                GuiCommands::Devices(vec) => {
+                    // Auto-select if only one device and none selected 
+                    if vec.len() == 1 && self.selected_device.is_empty() {
+                        let device_name = vec.keys().next().unwrap().clone();
+                        let device = vec.values().next().unwrap().clone();
+                        self.selected_device = device_name;
+                        self.initialize_device_info(&device);
+                    }
+                    self.devices = Some(vec);
+                },
                 GuiCommands::DeviceInfo(info) => self.device_info = Some(info),
                 GuiCommands::GetDevicesFailure(idevice_error) => {
                     self.devices_placeholder = format!(
@@ -675,7 +687,11 @@ impl eframe::App for MyApp {
                                     ComboBox::from_label("")
                                         .selected_text(&self.selected_device)
                                         .show_ui(ui, |ui| {
-                                            for (dev_name, dev) in devs {
+                                            // Create sorted vec of (name, device) pairs
+                                            let mut sorted_devices: Vec<_> = devs.iter().collect();
+                                            sorted_devices.sort_by(|a, b| a.0.cmp(b.0));
+                                            
+                                            for (dev_name, dev) in sorted_devices {
                                                 if ui
                                                     .selectable_value(
                                                         &mut self.selected_device,
@@ -914,5 +930,42 @@ impl eframe::App for MyApp {
                 }
             });
         });
+    }
+}
+
+impl MyApp {
+    fn initialize_device_info(&mut self, dev: &UsbmuxdDevice) {
+        // Reset all state
+        self.wireless_enabled = None;
+        self.dev_mode_enabled = None;
+        self.ddi_mounted = None;
+        self.device_info = None;
+        self.pairing_file = None;
+        self.pairing_file_message = None;
+        self.pairing_file_string = None;
+        self.installed_apps = None;
+        self.validating = false;
+        self.validate_res = None;
+
+        // Send all device info requests
+        let dev_clone = dev.clone();
+        self.idevice_sender
+            .send(IdeviceCommands::EnableWireless(dev_clone.clone()))
+            .unwrap();
+        self.idevice_sender
+            .send(IdeviceCommands::CheckDevMode(dev_clone.clone()))
+            .unwrap();
+        self.idevice_sender
+            .send(IdeviceCommands::AutoMount(dev_clone.clone()))
+            .unwrap();
+        self.idevice_sender
+            .send(IdeviceCommands::GetDeviceInfo(dev_clone))
+            .unwrap();
+        self.idevice_sender
+            .send(IdeviceCommands::InstalledApps((
+                dev.clone(),
+                self.supported_apps.keys().map(|x| x.to_owned()).collect(),
+            )))
+            .unwrap();
     }
 }
