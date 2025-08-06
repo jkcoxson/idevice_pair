@@ -37,6 +37,10 @@ fn main() {
         "SideStore".to_string(),
         "ALTPairingFile.mobiledevicepairing".to_string(),
     );
+    supported_apps.insert(
+        "LiveContainer".to_string(),
+        "SideStore/Documents/ALTPairingFile.mobiledevicepairing".to_string(),
+    );
     supported_apps.insert("Feather".to_string(), "pairingFile.plist".to_string());
     supported_apps.insert("StikDebug".to_string(), "pairingFile.plist".to_string());
     supported_apps.insert("Protokolle".to_string(), "pairingFile.plist".to_string());
