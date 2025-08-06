@@ -43,7 +43,7 @@ jobs:
             toolfile: appimagetool-aarch64.AppImage
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       # Build setup
       - name: Setup Rust toolchain
@@ -119,7 +119,7 @@ jobs:
             target: aarch64-apple-darwin
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Rust for ${{ matrix.arch }}
         uses: actions-rs/toolchain@v1
@@ -146,7 +146,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Download x86_64 slice
         uses: actions/download-artifact@v4
