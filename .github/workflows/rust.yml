@@ -23,6 +23,7 @@ env:
   APP_NAME: idevice_pair
   VERSION: ${{ github.event.inputs.version }}
   ICON_PNG: icon.png
+  ICON_MACOS_PNG: icon_macos.png
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -214,7 +215,7 @@ jobs:
           EOF
 
           # 3) Generate .icns from PNG
-          sips -s format icns "${{ env.ICON_PNG }}" \
+          sips -s format icns "${{ env.ICON_MACOS_PNG }}" \
             --out "$APP/Contents/Resources/icon.icns"
 
           # 4) Clean any stray xattrs

@@ -69,9 +69,16 @@ fn main() {
         show_logs: false,
     };
 
-    let d = eframe::icon_data::from_png_bytes(include_bytes!("../icon.png"))
-        .expect("The icon data must be valid");
     let mut options = eframe::NativeOptions::default();
+
+    #[cfg(target_os = "macos")]
+    let icon_bytes: &[u8] = include_bytes!("../icon_macos.png");
+
+    #[cfg(not(target_os = "macos"))]
+    let icon_bytes: &[u8] = include_bytes!("../icon.png");
+
+    let d = eframe::icon_data::from_png_bytes(icon_bytes)
+        .expect("The icon data must be valid");
     options.viewport.icon = Some(std::sync::Arc::new(d));
 
     // rt must be kept in scope for channel lifetimes, so we define and then spawn.
