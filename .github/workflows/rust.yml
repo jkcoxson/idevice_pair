@@ -23,7 +23,6 @@ env:
   APP_NAME: idevice_pair
   VERSION: ${{ github.event.inputs.version }}
   ICON_PNG: icon.png
-  ICON_MACOS_PNG: icon_macos.png
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -215,8 +214,20 @@ jobs:
           EOF
 
           # 3) Generate .icns from PNG
-          sips -s format icns "${{ env.ICON_MACOS_PNG }}" \
-            --out "$APP/Contents/Resources/icon.icns"
+          ICONSET_DIR="icons.iconset"
+          mkdir -p "$ICONSET_DIR"
+          sips -z 16 16     "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_16x16.png"
+          sips -z 32 32     "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_16x16@2x.png"
+          sips -z 32 32     "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_32x32.png"
+          sips -z 64 64     "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_32x32@2x.png"
+          sips -z 128 128   "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_128x128.png"
+          sips -z 256 256   "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_128x128@2x.png"
+          sips -z 256 256   "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_256x256.png"
+          sips -z 512 512   "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_256x256@2x.png"
+          sips -z 512 512   "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_512x512.png"
+          sips -z 1024 1024  "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_512x512@2x.png"
+          iconutil -c icns "$ICONSET_DIR" -o "$APP/Contents/Resources/icon.icns"
+          rm -rf "$ICONSET_DIR"
 
           # 4) Clean any stray xattrs
           xattr -rc "$APP"
