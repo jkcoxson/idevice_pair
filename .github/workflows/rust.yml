@@ -164,6 +164,9 @@ jobs:
     name: Create, Sign, Notarize & Upload Universal DMG
     needs: macos-universal
     runs-on: macos-latest
+    env:
+      HAVE_SIGNING_SECRETS: ${{ secrets.DEV_ID_P12_BASE64 != '' && secrets.DEV_ID_P12_PASSWORD != '' && secrets.DEV_IDENTITY_NAME != '' }}
+      HAVE_NOTARIZE_SECRETS: ${{ secrets.NOTARIZE_APPLE_ID != '' && secrets.NOTARIZE_APP_SPECIFIC_PASS != '' && secrets.NOTARIZE_TEAM_ID != '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -181,6 +184,7 @@ jobs:
           path: slice-arm64
 
       - name: Import Developer ID Certificate
+        if: env.HAVE_SIGNING_SECRETS == 'true'
         uses: apple-actions/import-codesign-certs@v5
         with:
           p12-file-base64: ${{ secrets.DEV_ID_P12_BASE64 }}
@@ -233,6 +237,7 @@ jobs:
           xattr -rc "$APP"
 
       - name: Code-sign with Hardened Runtime & Timestamp
+        if: env.HAVE_SIGNING_SECRETS == 'true'
         run: |
           APP="${{ env.APP_NAME }}.app"
           codesign --force --deep --options runtime --timestamp \
@@ -260,6 +265,7 @@ jobs:
           echo "$DMG" > dmg-path.txt
 
       - name: Notarize & Staple DMG
+        if: env.HAVE_NOTARIZE_SECRETS == 'true'
         run: |
           DMG=$(cat dmg-path.txt)
           xcrun notarytool submit "$DMG" \
@@ -269,7 +275,7 @@ jobs:
             --wait --verbose
           xcrun stapler staple "$DMG"
 
-      - name: Upload Notarized DMG
+      - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-${{ env.VERSION }}-macos-universal.dmg
