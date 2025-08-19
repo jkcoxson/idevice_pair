@@ -1,5 +1,3 @@
-# Workflow by se2cird <https://github.com/se2cird>, ask me if you have any questions
-
 # Workflow to build and upload AppImage for Linux, macOS Universal DMG, and Windows .exe
 
 name: Rust Cross-Platform Builds
