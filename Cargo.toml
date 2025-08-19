@@ -15,8 +15,8 @@ idevice = { version = "0.1.39", features = [
 ] }
 egui = { version = "0.32" }
 egui_logger = { version = "0.8" }
-eframe = { version = "0.32", default-features = false, features = ["default_fonts", "wgpu"] }
-wgpu = { version = "25", features = ["dx12", "vulkan"] }
+eframe = { version = "0.32", default-features = false, features = ["default_fonts", "wgpu", "wayland", "x11"] }
+wgpu = { version = "25", features = ["dx12", "vulkan", "metal", "gles"] }
 rfd = { version = "0.15", features = ["gtk3"], default-features = false }
 tokio = { version = "1.45", features = ["full"] }
 plist = { version = "1.7" }
