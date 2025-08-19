@@ -214,7 +214,7 @@ jobs:
           EOF
 
           # 3) Generate .icns from PNG
-          sips -s format icns "${{ env.ICON_PNG }}" \
+          sips -s format icns "${{ env.ICON_MACOS_PNG }}" \
             --out "$APP/Contents/Resources/icon.icns"
 
           # 4) Clean any stray xattrs
