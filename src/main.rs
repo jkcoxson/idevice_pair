@@ -72,7 +72,7 @@ fn main() {
     let mut options = eframe::NativeOptions::default();
 
     #[cfg(target_os = "macos")]
-    let icon_bytes: &[u8] = include_bytes!("../icon_macos.png");
+    let icon_bytes: &[u8] = include_bytes!("../icon.png");
 
     #[cfg(not(target_os = "macos"))]
     let icon_bytes: &[u8] = include_bytes!("../icon.png");
