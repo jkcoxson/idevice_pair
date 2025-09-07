@@ -79,8 +79,17 @@ The app title is **“idevice pair”** and includes a log toggle.
   * **Windows**: Install **Apple’s iTunes from apple.com** (not the Microsoft Store version) and make sure Apple Mobile Device Service is running.
   * **Linux**: Install `usbmuxd` and start the service; add proper **udev rules** so the device is accessible without root.
 * **iOS device** + trust the computer.
+* 
+## Download usbmxd
 
----
+**Linux**:
+
+```console
+sudo apt install usbmuxd
+sudo systemctl enable --now usbmuxd
+```
+
+**Windows**: Download [Itunes](https://www.apple.com/itunes/download/win64/)
 
 ## Build & Run
 
