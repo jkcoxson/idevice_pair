@@ -40,7 +40,7 @@ Check the [releases](https://github.com/jkcoxson/idevice_pair/releases) page for
 * **Install into apps:** If these are installed, writes the pairing file into their container:
 
   * `SideStore` → `ALTPairingFile.mobiledevicepairing`
-  * `LiveContainer` → `SideStore/Documents/ALTPairingFile.mobiledevicepairing`
+  * `LiveContainer+SideStore` (Appears as `LiveContainer`) → `SideStore/Documents/ALTPairingFile.mobiledevicepairing`
   * `Feather` → `pairingFile.plist`
   * `StikDebug` → `pairingFile.plist`
   * `Protokolle` → `pairingFile.plist`
@@ -65,8 +65,8 @@ Check the [releases](https://github.com/jkcoxson/idevice_pair/releases) page for
 
 ## Screenshots
 
-*Add `icon.png` / screenshots here if you’d like.*
-The app title is **“idevice pair”** and includes a log toggle.
+<img src="icon.png" width="200">
+
 
 ---
 
@@ -76,7 +76,7 @@ The app title is **“idevice pair”** and includes a log toggle.
 * **usbmuxd / Apple Mobile Device**:
 
   * **macOS**: Built-in (`usbmuxd` runs by default).
-  * **Windows**: Install **Apple’s iTunes from apple.com** (not the Microsoft Store version) and make sure Apple Mobile Device Service is running.
+  * **Windows (64-bit)**: Install **Apple’s iTunes from apple.com** (not the Microsoft Store version) and make sure Apple Mobile Device Service is running.
   * **Linux**: Install `usbmuxd` and start the service; add proper **udev rules** so the device is accessible without root.
 * **iOS device** + trust the computer.
 * 
@@ -89,7 +89,7 @@ sudo apt install usbmuxd
 sudo systemctl enable --now usbmuxd
 ```
 
-**Windows**: Download [Itunes](https://www.apple.com/itunes/download/win64/)
+**Windows**: Download and install [iTunes](https://www.apple.com/itunes/download/win64/)
 
 ## Build & Run
 
@@ -127,10 +127,10 @@ cargo run --release
    * **Generate**: Create a new pairing file (useful for alternate hosts or apps).
    * **Save to File**: Writes a `.plist` you can copy around.
 
-4. **Validate over LAN (optional):**
+4. **Validate over LAN:**
    Enter IP or leave blank for auto-discover. The app tries a Lockdown session to confirm the file works over Wi-Fi.
 
-5. **Install into apps (optional):**
+5. **Install into apps:**
    If a supported app is installed, press **Install** to drop the pairing file into its container path via House Arrest/AFC.
 
 6. **Logs:**
@@ -169,6 +169,7 @@ cargo run --release
 
 * Pairing files grant trusted access to your device over USB/Wi-Fi. **Treat them like credentials**—don’t share them publicly and remove them from untrusted hosts.
 * “Generate” uses a new HostID/BUID (with a small tweak to avoid invalidating a currently active host), so existing sessions on your main machine should remain usable.
+* Pairing files can and will expire in some circumstances (such as software updates, clearing network settings, clearing trusted computers, etc.). This is due to Apple's restrictions and cannot be avoided.
 
 ---
 
