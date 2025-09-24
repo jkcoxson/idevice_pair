@@ -29,7 +29,7 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/se2crid/idevice_pair.git
+   git clone https://github.com/jkcoxson/idevice_pair.git
    cd idevice_pair
    ```
 
