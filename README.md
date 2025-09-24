@@ -1,229 +1,161 @@
-# idevice_pair
+# iDevice Pair
 
-A tiny cross-platform GUI (egui/eframe) for working with iOS pairing files and developer settings—built on top of the [`idevice`](https://crates.io/crates/idevice) Rust crate.
+A cross-platform GUI application for managing iOS device pairing and wireless debugging. This tool provides an easy-to-use interface for enabling wireless debugging, managing pairing files, and working with various iOS sideloading applications.
 
-It lets you:
+## Features
 
-* List USB-connected devices via `usbmuxd`
-* Show key device info (Name, Model, iOS version, Build, UDID)
-* Enable **Wireless Debugging** (`EnableWifiDebugging`)
-* Check **Developer Mode** status
-* Auto-mount the **Developer Disk Image** (iOS 17+)
-* **Load** the current pairing record from `usbmuxd`
-* **Generate** a fresh pairing file
-* **Save** the pairing file to disk
-* **Validate** the pairing file over LAN (TCP 62078), auto-discovering the device
-* One-click **install** of the pairing file into supported apps via House Arrest/AFC
+- **Device Management**: Automatically discover and connect to iOS devices via USB
+- **Wireless Debugging**: Enable wireless debugging on iOS devices
+- **Developer Mode**: Check and monitor developer mode status
+- **Pairing Files**: Generate, load, and validate device pairing files
+- **App Integration**: Support for popular sideloading apps including:
+  - SideStore
+  - LiveContainer
+  - Feather
+  - StikDebug
+  - Protokolle
+  - Antrag
+- **Network Discovery**: Discover devices on the local network
+- **Developer Disk Image Mounting**: Automatically mount required developer images
 
-> Yes, the app is (mostly) a single Rust file. It’s fine. Please don't look at my desk. Send help.
+## Prerequisites
 
----
+- **macOS/Linux/Windows**: Cross-platform support
+- **iOS Device**: Connected via USB or on the same network
+- **Developer Mode**: Must be enabled on the iOS device for full functionality
+- **Rust**: Required for building from source
 
-## Download
+## Building from Source
 
-Check the [releases](https://github.com/jkcoxson/idevice_pair/releases) page for the newest release.
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/se2crid/idevice_pair.git
+   cd idevice_pair
+   ```
 
-## Features (details)
+2. Build the application:
+   ```bash
+   cargo build --release
+   ```
 
-* **Device discovery (USB):** Filters to USB connections only. Uses `Lockdown` to pull values.
-* **Device info panel:** Displays `DeviceName`, `ProductType`, `ProductVersion`, `BuildVersion`, `UniqueDeviceID`.
-* **Wireless Debugging:** Toggles `com.apple.mobile.wireless_lockdown:EnableWifiDebugging = true`.
-* **Developer Mode:** Reads `DeveloperModeStatus` from `com.apple.security.mac.amfi`.
-* **DDI auto-mount (iOS 17+):** Attempts to mount the Developer Disk Image so dev tooling works out of the box.
-* **Pairing file management:**
-
-  * **Load** from `usbmuxd` (the one the host already has).
-  * **Generate** a brand-new pairing (internally tweaks the BUID to avoid invalidating the currently used one).
-  * **Save** to disk (`.plist`) and view the raw serialized plist in a monospace panel.
-  * **Validate** over Wi-Fi (input IP or auto-discover; tests a Lockdown session on port 62078).
-    
-* **Install into apps:** If these are installed, writes the pairing file into their container:
-
-  * `SideStore` → `ALTPairingFile.mobiledevicepairing`
-  * `LiveContainer+SideStore` (Appears as `LiveContainer`) → `SideStore/Documents/ALTPairingFile.mobiledevicepairing`
-  * `Feather` → `pairingFile.plist`
-  * `StikDebug` → `pairingFile.plist`
-  * `Protokolle` → `pairingFile.plist`
-  * `Antrag` → `pairingFile.plist`
-    
-* **Logs UI:** Built-in log window (toggle “logs” in the title row) using `egui_logger`.
-
----
-
-## How it works (high level)
-
-* **GUI thread:** `eframe`/`egui` renders the UI.
-* **Worker runtime:** A multi-threaded `tokio` runtime handles device I/O.
-* **Message passing:** Two unbounded channels connect GUI ⇄ worker:
-
-  * `IdeviceCommands` → worker
-  * `GuiCommands` → GUI
-    
-* **Network/services:** Talks to `usbmuxd`, `lockdownd`, `installation_proxy`, `afc/house_arrest`, and raw TCP (62078) for validation. A small discovery module maps Wi-Fi MAC ⇄ IP for LAN validation.
-
----
-
-## Screenshots
-
-<img src="icon.png" width="200">
-
-
----
-
-## Requirements
-
-* **Rust**: stable toolchain (`cargo`).
-* **usbmuxd / Apple Mobile Device**:
-
-  * **macOS**: Built-in (`usbmuxd` runs by default).
-  * **Windows (64-bit)**: Install **Apple’s iTunes from apple.com** (not the Microsoft Store version) and make sure Apple Mobile Device Service is running.
-  * **Linux**: Install `usbmuxd` and start the service; add proper **udev rules** so the device is accessible without root.
-* **iOS device** + trust the computer.
-* 
-## Download usbmxd
-
-**Linux**:
-
-```console
-sudo apt install usbmuxd
-sudo systemctl enable --now usbmuxd
-```
-
-**Windows**: Download and install [iTunes](https://www.apple.com/itunes/download/win64/)
-
-## Build & Run
-
-```bash
-# in the repo root
-cargo run --release
-```
-
-* On **Windows release builds**, the console window is hidden by:
-
-  ```rust
-  #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-  ```
-* The app embeds `icon.png` from the project root.
-
----
+3. Run the application:
+   ```bash
+   cargo run --release
+   ```
 
 ## Usage
 
-1. **Connect your device via USB.**
-   Launch the app; your devices load automatically. Click **Refresh…** if needed.
+### Getting Started
 
-2. **Select a device.**
-   The app will:
+1. **Connect your iOS device** via USB to your computer
+2. **Launch the application** - it will automatically scan for connected devices
+3. **Select your device** from the dropdown menu
+4. **Enable wireless debugging** if desired for wireless connectivity
 
-   * Enable Wireless Debugging (or show errors)
-   * Check Developer Mode
-   * Attempt to mount the DDI (iOS 17+)
-   * Populate device info
-   * Detect supported apps for install targets
+### Managing Pairing Files
 
-3. **Pairing file:**
+The application can generate and manage pairing files for various sideloading applications:
 
-   * **Load**: Pull from `usbmuxd`’s current host pairing.
-   * **Generate**: Create a new pairing file (useful for alternate hosts or apps).
-   * **Save to File**: Writes a `.plist` you can copy around.
+1. **Load existing pairing file**: Click "Load Pairing File" to import from your device
+2. **Generate new pairing file**: Click "Generate Pairing File" to create a fresh pairing
+3. **Save pairing file**: Export the pairing file for use with supported applications
+4. **Validate pairing**: Test the pairing file against a network-connected device
 
-4. **Validate over LAN:**
-   Enter IP or leave blank for auto-discover. The app tries a Lockdown session to confirm the file works over Wi-Fi.
+## Pairing Guide
 
-5. **Install into apps:**
-   If a supported app is installed, press **Install** to drop the pairing file into its container path via House Arrest/AFC.
+idevice_pair allows you to create a pairing file for programs like StikDebug to communicate with your device remotely. This pairing file is device-specific and required for tools like StikDebug to function correctly.
 
-6. **Logs:**
-   Click the **logs** toggle in the header; you can adjust categories in the panel.
+### Prerequisites for Pairing
 
----
+Before creating a pairing file, ensure you have:
+
+1. **Set a passcode** on your iOS device
+2. **Sideloaded an app** with the get-task-allow entitlement (can be done with [SideStore](https://sidestore.io/) or similar tools)
+3. **Enabled Developer Mode** on your iOS/iPadOS device (found in Settings → Privacy & Security after sideloading an app)
+
+### Installation Instructions
+
+#### macOS
+1. Download [idevice pair for macOS](https://github.com/jkcoxson/idevice_pair/releases/latest/download/idevice_pair--macos-universal.dmg)
+2. Open the Disk Image and drag `idevice pair` to `Applications`
+
+#### Windows
+1. Install iTunes ([64-bit](https://apple.com/itunes/download/win64) or [32-bit](https://apple.com/itunes/download/win32)) from Apple's website
+2. Download [idevice pair for Windows](https://github.com/jkcoxson/idevice_pair/releases/latest/download/idevice_pair--windows-x86_64.exe) and save it to a memorable location
+
+#### Linux
+1. Install usbmuxd: 
+   ```bash
+   sudo apt install -y usbmuxd
+   ```
+2. Download idevice_pair for your architecture:
+   - [x86_64](https://github.com/jkcoxson/idevice_pair/releases/latest/download/idevice_pair--linux-x86_64.AppImage)
+   - [AArch64](https://github.com/jkcoxson/idevice_pair/releases/latest/download/idevice_pair--linux-aarch64.AppImage)
+3. Make the downloaded file executable
+
+### Pairing Instructions
+
+1. **Connect your device** to your computer via USB cable
+   - If prompted, select `Trust` and enter your passcode
+2. **Open idevice pair** and select your device from the dropdown menu
+3. **Load pairing file**: 
+   - Ensure your device is unlocked and on the home screen
+   - Click `Load Pairing File`
+   - If prompted on your device, tap `Trust` and enter your passcode
+4. **Install for your app**:
+   - Keep your device unlocked and on the home screen
+   - Scroll down and click `Install` under your target application (e.g., "StikDebug")
+   - You should see `Success` appear in green
+
+## Supported Applications
+
+The tool includes built-in support for pairing file formats used by:
+
+- **SideStore**: `ALTPairingFile.mobiledevicepairing`
+- **LiveContainer**: `SideStore/Documents/ALTPairingFile.mobiledevicepairing`
+- **Feather**: `pairingFile.plist`
+- **StikDebug**: `pairingFile.plist`
+- **Protokolle**: `pairingFile.plist`
+- **Antrag**: `pairingFile.plist`
+
+## Dependencies
+
+This project uses several key dependencies:
+
+- **[idevice](https://crates.io/crates/idevice)**: Core iOS device communication library
+- **[egui](https://crates.io/crates/egui)**: Immediate mode GUI framework
+- **[eframe](https://crates.io/crates/eframe)**: Application framework for egui
+- **[tokio](https://crates.io/crates/tokio)**: Asynchronous runtime
+- **[rfd](https://crates.io/crates/rfd)**: Native file dialogs
+
+For a complete list of dependencies, see [`Cargo.toml`](Cargo.toml).
 
 ## Troubleshooting
 
-* **“Failed to connect to usbmuxd”**
+### Device Not Detected
+- Ensure your iOS device is connected via USB
+- Check that the device is trusted on your computer
+- Try disconnecting and reconnecting the device
 
-  * **Windows:** Ensure you installed **iTunes from Apple’s website**, not the Store version, and that **Apple Mobile Device Service** is running.
-  * **Linux:** Install and start `usbmuxd`; confirm user permissions/udev rules.
-  * **macOS:** `usbmuxd` should be present; if it fails consistently, file an issue with logs.
+### Wireless Connection Issues
+- Verify both devices are on the same network
+- Ensure wireless debugging is enabled on the iOS device
+- Check firewall settings that might block port 62078
 
-* **Developer Mode shows “Disabled”**
+### Pairing File Issues
+- Make sure developer mode is enabled on your iOS device
+- Verify the pairing file format matches your target application
+- Try generating a fresh pairing file if validation fails
 
-  * Enable Developer Mode on the device (Settings → Privacy & Security → Developer Mode). Reboot if prompted.
+## Contributing
 
-* **DDI mount fails**
-
-  * Ensure developer mode is enabled.
-
-* **Validation fails over LAN**
-
-  * Confirm the device and host are on the same subnet and the device’s **Wireless Debugging** is enabled.
-  * If you typed an IP, double-check it; leaving it blank lets the app auto-discover.
-
-* **Install into app fails**
-
-  * Make sure the target app is actually installed.
-
----
-
-## Security & Notes
-
-* Pairing files grant trusted access to your device over USB/Wi-Fi. **Treat them like credentials**—don’t share them publicly and remove them from untrusted hosts.
-* “Generate” uses a new HostID/BUID (with a small tweak to avoid invalidating a currently active host), so existing sessions on your main machine should remain usable.
-* Pairing files can and will expire in some circumstances (such as software updates, clearing network settings, clearing trusted computers, etc.). This is due to Apple's restrictions and cannot be avoided.
-
----
-
-## Development
-
-Key crates you’ll see in `Cargo.toml`:
-
-* `eframe`, `egui`, `egui_logger`
-* `tokio` (multi-thread runtime), `log`
-* `rfd` (native file dialogs)
-* `idevice` (Lockdown, Installation Proxy, House Arrest/AFC, usbmuxd, etc.)
-
-Build with ``cargo``
-
-```sh
-cargo build --release
-```
-
-Project layout (intentionally(?) minimal):
-
-```
-src/
-  main.rs        # the whole app (UI + command enums + runtime wiring)
-  discover.rs    # LAN discovery (maps Wi-Fi MAC -> IP)
-  mount.rs       # DDI auto-mount helpers
-icon.png
-```
-
-Messaging:
-
-```rust
-// GUI -> worker
-enum IdeviceCommands { /* ... */ }
-
-// worker -> GUI
-enum GuiCommands { /* ... */ }
-```
-
----
-
-## Roadmap / Ideas
-
-* Head empty, no ideas
-
----
+Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
 
 ## License
 
-MIT
+This project is licensed under the MIT License.
 
----
+## Acknowledgments
 
-## Disclaimer
-
-This project interfaces with Apple services (`lockdownd`, `usbmuxd`, etc.). It’s intended for legitimate development and device management workflows. You are responsible for complying with Apple’s terms and local laws.
-
-ChatGPT wrote most of this readme. I'm so sorry.
+- Built with the [idevice](https://crates.io/crates/idevice) library for iOS device communication
+- GUI powered by [egui](https://github.com/emilk/egui)
