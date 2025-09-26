@@ -14,7 +14,7 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
   - Feather
   - Protokolle
   - Antrag
-- **Network Discovery**: Validate pairing for devices on the local network
+- **Network Discovery**: Validate pairings for devices on the local network
 - **Developer Disk Image Mounting**: Automatically mount required developer images
 
 ## Prerequisites
