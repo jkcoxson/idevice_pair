@@ -5,7 +5,7 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
 ## Features
 
 - **Device Management**: Automatically discover and connect to iOS devices via USB
-- **Developer Mode**: Check and monitor developer mode status
+- **Developer Mode**: Monitor developer mode status
 - **Pairing Files**: Generate, load, and validate device pairing files
 - **App Integration**: Support for popular apps including:
   - SideStore
@@ -47,7 +47,7 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
 
 1. **Connect your iOS device** via USB to your computer
 2. **Launch the application** - it will automatically scan for connected devices
-3. **Select your device** from the dropdown menu
+3. **Select your device** from the dropdown menu if not already selected
 
 ### Managing Pairing Files
 
@@ -56,7 +56,7 @@ The application can generate and manage pairing files for various applications:
 1. **Load existing pairing file**: Click `Load` to import from your computer (recommended)
 2. **Generate new pairing file**: Click `Generate` to create a fresh pairing
 3. **Save pairing file**: Export the pairing file to your computer or your supported applications
-4. **Validate pairing**: Test the pairing file against a local network connected device
+4. **Validate pairing**: Test the pairing file against a local network-connected device
 
 ## Pairing Guide
 
@@ -66,7 +66,7 @@ Before creating a pairing file, ensure you have:
 
 1. **Set a passcode** on your iOS device
 (For maximum capabilities, also ensure you have)
-2. **Sideloaded an app** with the get-task-allow entitlement (can be done with [SideStore](https://sidestore.io/), a Development Certificate + signer, or similar tools)
+2. **Sideloaded an app** (can be done with [SideStore](https://sidestore.io/), a  Certificate + signer, or similar tools)
 3. **Enabled Developer Mode** on your iOS/iPadOS device (found in Settings → Privacy & Security after sideloading an app)
 
 ### Installation Instructions
@@ -140,7 +140,6 @@ For a complete list of dependencies, see [`Cargo.toml`](Cargo.toml).
   
 ### Wireless Connection Issues
 - Verify both devices are on the same network
-- Ensure wireless debugging is enabled on the iOS device
 - Check firewall settings that might block port 62078
 
 ## Contributing
