@@ -67,7 +67,9 @@ Before creating a pairing file, ensure you have:
 1. **Set a passcode** on your iOS device
 
 (For maximum performance, you should also)
-2. **Sideload an app** (can be done with [SideStore](https://sidestore.io/), a  certificate + signer, or similar tools)
+
+2. **Sideload an app** (can be done with [SideStore](https://sidestore.io/) or a  certificate + signer)
+
 3. **Enable Developer Mode** on your iOS/iPadOS device (found in Settings → Privacy & Security after sideloading an app)
 
 ### Installation Instructions
