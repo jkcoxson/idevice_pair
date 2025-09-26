@@ -1,28 +1,26 @@
 # idevice_pair
 
-A cross-platform GUI application for managing iOS device pairing and wireless debugging. This tool provides an easy-to-use interface for enabling wireless debugging, managing pairing files, and working with various iOS sideloading applications.
+A cross-platform GUI application for managing iOS device pairing and wireless debugging. This tool provides an easy-to-use interface for managing pairing files which working with various iOS applications.
 
 ## Features
 
 - **Device Management**: Automatically discover and connect to iOS devices via USB
-- **Wireless Debugging**: Enable wireless debugging on iOS devices
 - **Developer Mode**: Check and monitor developer mode status
 - **Pairing Files**: Generate, load, and validate device pairing files
-- **App Integration**: Support for popular sideloading apps including:
+- **App Integration**: Support for popular apps including:
   - SideStore
   - LiveContainer+SideStore
   - StikDebug
   - Feather
   - Protokolle
   - Antrag
-- **Network Discovery**: Discover devices on the local network
+- **Network Discovery**: Validate pairing for devices on the local network
 - **Developer Disk Image Mounting**: Automatically mount required developer images
 
 ## Prerequisites
 
-- **macOS/Linux/Windows**: Cross-platform support
-- **iOS Device**: Must have a passcode set, Developer Mode enabled, and connected via USB
-- **Developer Mode**: Must be enabled on the iOS device for full functionality
+- **macOS/Linux/Windows**: Cross-platform support, must have usbmuxd installed
+- **iOS Device**: Must have a passcode set and be connected via USB
 - **Rust**: Required for building from source
 
 ## Building from Source
@@ -50,16 +48,15 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
 1. **Connect your iOS device** via USB to your computer
 2. **Launch the application** - it will automatically scan for connected devices
 3. **Select your device** from the dropdown menu
-4. **Enable wireless debugging** if desired for wireless connectivity
 
 ### Managing Pairing Files
 
-The application can generate and manage pairing files for various sideloading applications:
+The application can generate and manage pairing files for various applications:
 
 1. **Load existing pairing file**: Click `Load` to import from your computer (recommended)
 2. **Generate new pairing file**: Click `Generate` to create a fresh pairing
 3. **Save pairing file**: Export the pairing file to your computer or your supported applications
-4. **Validate pairing**: Test the pairing file against a network-connected device
+4. **Validate pairing**: Test the pairing file against a local network connected device
 
 ## Pairing Guide
 
@@ -68,6 +65,7 @@ The application can generate and manage pairing files for various sideloading ap
 Before creating a pairing file, ensure you have:
 
 1. **Set a passcode** on your iOS device
+(For maximum capabilities, also ensure you have)
 2. **Sideloaded an app** with the get-task-allow entitlement (can be done with [SideStore](https://sidestore.io/), a Development Certificate + signer, or similar tools)
 3. **Enabled Developer Mode** on your iOS/iPadOS device (found in Settings → Privacy & Security after sideloading an app)
 
@@ -136,7 +134,7 @@ For a complete list of dependencies, see [`Cargo.toml`](Cargo.toml).
 - Try disconnecting and reconnecting the device
 
 ### Pairing File Issues
-- Make sure developer mode is enabled on your iOS device
+- Ensure developer mode is enabled on your iOS device
 - Verify the pairing file format matches your target application (.plist or .mobiledevicepairing)
 - Try creating a fresh pairing file using the `load` button if it doesn't function as expected
   
