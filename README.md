@@ -20,7 +20,7 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
 ## Prerequisites
 
 - **macOS/Linux/Windows**: Cross-platform support, must have usbmuxd installed
-- **iOS Device**: Must have a passcode set and be connected via USB
+- **iOS/iPadOS Device**: Must have a passcode set and be connected via USB
 - **Rust**: Required for building from source
 
 ## Building from Source
