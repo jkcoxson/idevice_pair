@@ -1,6 +1,6 @@
 # idevice_pair
 
-A cross-platform GUI application for managing iOS device pairing and wireless debugging. This tool provides an easy-to-use interface for managing pairing files which working with various iOS applications.
+A cross-platform GUI application for managing iOS device pairing and wireless debugging. This tool provides an easy-to-use interface for managing pairing files which work with various iOS applications.
 
 ## Features
 
