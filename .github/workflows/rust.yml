@@ -211,24 +211,13 @@ jobs:
             <key>CFBundleExecutable</key><string>${{ env.APP_NAME }}</string>
             <key>CFBundlePackageType</key><string>APPL</string>
             <key>CFBundleIconFile</key><string>icon.icns</string>
+            <key>CFBundleIconName</key><string>icon</string>
           </dict></plist>
           EOF
 
-          # 3) Generate .icns from PNG
-          ICONSET_DIR="icons.iconset"
-          mkdir -p "$ICONSET_DIR"
-          sips -z 16 16     "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_16x16.png"
-          sips -z 32 32     "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_16x16@2x.png"
-          sips -z 32 32     "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_32x32.png"
-          sips -z 64 64     "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_32x32@2x.png"
-          sips -z 128 128   "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_128x128.png"
-          sips -z 256 256   "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_128x128@2x.png"
-          sips -z 256 256   "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_256x256.png"
-          sips -z 512 512   "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_256x256@2x.png"
-          sips -z 512 512   "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_512x512.png"
-          sips -z 1024 1024  "${{ env.ICON_PNG }}" --out "$ICONSET_DIR/icon_512x512@2x.png"
-          iconutil -c icns "$ICONSET_DIR" -o "$APP/Contents/Resources/icon.icns"
-          rm -rf "$ICONSET_DIR"
+          # 3) Copy icon files to Resources
+          cp icon.icns "$APP/Contents/Resources/"
+          cp Assets.car "$APP/Contents/Resources/"
 
           # 4) Clean any stray xattrs
           xattr -rc "$APP"
