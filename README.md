@@ -77,6 +77,17 @@ Before creating a pairing file, ensure you have:
 #### macOS
 1. Download [idevice_pair for macOS](https://github.com/jkcoxson/idevice_pair/releases/latest/download/idevice_pair--macos-universal.dmg)
 2. Open the Disk Image and drag `idevice_pair` to `Applications`
+  
+##### If building from source:
+1. Install cargo-bundle and turn it into an app:
+   ```bash
+   cargo install cargo-bundle
+   cargo bundle --release
+   ```
+2. Move the app to Applications:
+   ```bash
+   mv PATH_TO_CLONED_REPO/target/release/bundle/osx/idevice_pair.app /Applications
+   ```
 
 #### Windows
 1. Install [iTunes](https://apple.com/itunes/download/win64) from Apple's website
