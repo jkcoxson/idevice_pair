@@ -40,6 +40,6 @@ default = ["generate"]
 
 #Apple macos stuff
 [package.metadata.bundle]
-name = "iDevice Pair"
+name = "idevice_pair"
 identifier = "com.cephandrius.idevicepair"
 icon = ["icon.icns"]
