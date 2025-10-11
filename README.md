@@ -8,12 +8,12 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
 - **Developer Mode**: Monitor developer mode status
 - **Pairing Files**: Generate, load, and validate device pairing files
 - **App Integration**: Support for popular apps including:
-  - SideStore
-  - LiveContainer+SideStore
-  - StikDebug
-  - Feather
-  - Protokolle
-  - Antrag
+  - [SideStore](https://github.com/SideStore/SideStore)
+  - [LiveContainer+SideStore](https://github.com/LiveContainer/LiveContainer)
+  - [StikDebug](https://github.com/StephenDev0/StikDebug)
+  - [Feather](https://github.com/khcrysalis/Feather)
+  - [Protokolle](https://github.com/khcrysalis/Protokolle)
+  - [Antrag](https://github.com/khcrysalis/Antrag)
 - **Network Discovery**: Validate pairings for devices on the local network
 - **Developer Disk Image Mounting**: Automatically mount required developer images
 
