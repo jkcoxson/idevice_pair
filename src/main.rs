@@ -872,11 +872,44 @@ impl eframe::App for MyApp {
                             ui.heading("Load");
                             ui.label("Load the pairing file from the system.");
                             if ui.button("Load").clicked() {
-                                self.pairing_file_message = Some("Loading...".to_string());
-                                self.pairing_file_string = None;
-                                self.idevice_sender
-                                    .send(IdeviceCommands::LoadPairingFile(dev.clone()))
-                                    .unwrap();
+                                #[cfg(not(feature = "generate"))]
+                                {
+                                    let ctrl_down = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
+                                    if ctrl_down && self.pairing_file.is_some() {
+                                        if let Some(p) = FileDialog::new()
+                                            .set_can_create_directories(true)
+                                            .set_title("Save Pairing File")
+                                            .set_file_name(format!("{}.plist", &dev.udid))
+                                            .save_file()
+                                        {
+                                            if let Err(e) = std::fs::write(
+                                                p,
+                                                self.pairing_file
+                                                    .as_ref()
+                                                    .unwrap()
+                                                    .clone()
+                                                    .serialize()
+                                                    .unwrap(),
+                                            ) {
+                                                self.save_error = Some(e.to_string());
+                                            }
+                                        }
+                                    } else {
+                                        self.pairing_file_message = Some("Loading...".to_string());
+                                        self.pairing_file_string = None;
+                                        self.idevice_sender
+                                            .send(IdeviceCommands::LoadPairingFile(dev.clone()))
+                                            .unwrap();
+                                    }
+                                }
+                                #[cfg(feature = "generate")]
+                                {
+                                    self.pairing_file_message = Some("Loading...".to_string());
+                                    self.pairing_file_string = None;
+                                    self.idevice_sender
+                                        .send(IdeviceCommands::LoadPairingFile(dev.clone()))
+                                        .unwrap();
+                                }
                             }
                         });
                         ui.separator();
