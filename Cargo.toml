@@ -4,7 +4,7 @@ version = "0.1.9"
 edition = "2024"
 
 [dependencies]
-idevice = { version = "0.1.43", features = [
+idevice = { version = "0.1.46", features = [
   "pair",
   "usbmuxd",
   "installation_proxy",
