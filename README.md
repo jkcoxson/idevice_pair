@@ -11,6 +11,7 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
   - [SideStore](https://github.com/SideStore/SideStore)
   - [LiveContainer+SideStore](https://github.com/LiveContainer/LiveContainer)
   - [StikDebug](https://github.com/StephenDev0/StikDebug)
+  - [SparseBox](https://github.com/spadaria/SparseBox)
   - [Feather](https://github.com/khcrysalis/Feather)
   - [Protokolle](https://github.com/khcrysalis/Protokolle)
   - [Antrag](https://github.com/khcrysalis/Antrag)
@@ -113,6 +114,7 @@ The tool includes built-in support for pairing file formats used by:
 - **SideStore**: `ALTPairingFile.mobiledevicepairing`
 - **LiveContainer+SideStore**: `SideStore/Documents/ALTPairingFile.mobiledevicepairing`
 - **StikDebug**: `pairingFile.plist`
+- **SparseBox**: `pairingFile.plist`
 - **Feather**: `pairingFile.plist`
 - **Protokolle**: `pairingFile.plist`
 - **Antrag**: `pairingFile.plist`
