@@ -13,16 +13,17 @@ idevice = { version = "0.1.46", features = [
   "mobile_image_mounter",
   "tss",
 ] }
-egui = { version = "0.32" }
-egui_logger = { version = "0.8" }
-eframe = { version = "0.32", default-features = false, features = [
+egui = "0.33.3"
+egui_logger = { version = "0.9" }
+eframe = { version = "0.33.3", default-features = false, features = [
   "default_fonts",
   "wgpu",
   "glow",
   "wayland",
   "x11",
 ] }
-wgpu = { version = "25", features = ["dx12", "vulkan", "metal", "gles"] }
+wgpu = { version = "27", features = ["dx12", "vulkan", "metal", "gles"] }
+naga = { version = "27", features = ["termcolor"] }
 rfd = { version = "0.15", features = ["gtk3"], default-features = false }
 tokio = { version = "1.45", features = ["full"] }
 plist = { version = "1.7" }
