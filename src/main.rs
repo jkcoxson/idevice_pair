@@ -33,7 +33,7 @@ mod discover;
 mod mount;
 
 const RP_PAIRING_FILE_NAME: &str = "rp_pairing_file.plist";
-const STIKDEBUG_APPSTORE_BUNDLE_ID: &str = "com.stik.js";
+const STIKDEBUG_APPSTORE_BUNDLE_ID: &str = "com.stik.sj";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PairingMode {
