@@ -34,6 +34,7 @@ mod discover;
 mod mount;
 
 const RP_PAIRING_FILE_NAME: &str = "rp_pairing_file.plist";
+const STIKDEBUG_APPSTORE_BUNDLE_ID: &str = "com.stik.js";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PairingMode {
@@ -101,9 +102,12 @@ fn supported_apps_for_mode(mode: PairingMode) -> HashMap<String, String> {
             supported_apps.insert("Protokolle".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("Antrag".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("ByeTunes".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("StikDebug".to_string(), "pairingFile.plist".to_string());
         }
         PairingMode::RemotePairing => {
-            supported_apps.insert("StikDebug".to_string(), RP_PAIRING_FILE_NAME.to_string());
+            supported_apps
+                .insert("StikDebug (Sideloaded)".to_string(), RP_PAIRING_FILE_NAME.to_string());
+            supported_apps.insert("StosDebug".to_string(), "pairingFile.plist".to_string());
         }
     }
     supported_apps
@@ -669,8 +673,16 @@ fn main() {
                             .and_then(|x| x.get("CFBundleDisplayName").and_then(|x| x.as_string()))
                         {
                             Some(n) => {
-                                if desired_apps.contains(&n.to_string()) {
-                                    installed.insert(n.to_string(), bundle_id);
+                                let app_name = if n == "StikDebug"
+                                    && bundle_id != STIKDEBUG_APPSTORE_BUNDLE_ID
+                                {
+                                    "StikDebug (Sideloaded)"
+                                } else {
+                                    n
+                                };
+
+                                if desired_apps.iter().any(|app| app == app_name) {
+                                    installed.insert(app_name.to_string(), bundle_id);
                                 }
                             }
                             None => {
