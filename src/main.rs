@@ -3,7 +3,6 @@
 
 use std::{
     collections::HashMap,
-    env,
     net::{IpAddr, SocketAddr},
     str::FromStr,
     thread,
@@ -114,11 +113,13 @@ fn supported_apps_for_mode(mode: PairingMode) -> HashMap<String, String> {
 }
 
 fn pairing_hostname() -> String {
-    env::var("HOSTNAME")
-        .or_else(|_| env::var("COMPUTERNAME"))
-        .ok()
-        .filter(|name| !name.trim().is_empty())
-        .unwrap_or_else(|| "idevice_pair".to_string())
+    let suffix: String = uuid::Uuid::new_v4()
+        .simple()
+        .to_string()
+        .chars()
+        .take(6)
+        .collect();
+    format!("idevice_pair-{suffix}")
 }
 
 fn send_pairing_status(sender: &UnboundedSender<GuiCommands>, message: impl Into<String>) {
