@@ -4,13 +4,17 @@ version = "0.1.9"
 edition = "2024"
 
 [dependencies]
-idevice = { version = "0.1.46", features = [
+idevice = { version = "0.1.55", features = [
   "pair",
   "usbmuxd",
   "installation_proxy",
   "afc",
   "house_arrest",
   "mobile_image_mounter",
+  "core_device_proxy",
+  "remote_pairing",
+  "rsd",
+  "tunnel_tcp_stack",
   "tss",
 ] }
 egui = "0.33.3"

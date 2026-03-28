@@ -3,23 +3,28 @@
 
 use std::{
     collections::HashMap,
+    env,
     net::{IpAddr, SocketAddr},
     str::FromStr,
     thread,
 };
 
 use egui::{Color32, ComboBox, RichText};
-use futures_util::StreamExt;
+use futures_util::{FutureExt, StreamExt};
 use log::error;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::unbounded_channel;
 
 use idevice::{
-    Idevice, IdeviceError, IdeviceService,
+    Idevice, IdeviceError, IdeviceService, RemoteXpcClient,
+    core_device_proxy::CoreDeviceProxy,
     house_arrest::HouseArrestClient,
     installation_proxy::InstallationProxyClient,
     lockdown::LockdownClient,
     pairing_file::PairingFile,
+    provider::IdeviceProvider,
+    remote_pairing::{RemotePairingClient, RpPairingFile},
+    rsd::RsdHandshake,
     usbmuxd::{Connection, UsbmuxdAddr, UsbmuxdConnection, UsbmuxdDevice, UsbmuxdListenEvent},
 };
 use rfd::FileDialog;
@@ -28,28 +33,146 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 mod discover;
 mod mount;
 
+const RP_PAIRING_FILE_NAME: &str = "rp_pairing_file.plist";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PairingMode {
+    Lockdown,
+    RemotePairing,
+}
+
+impl PairingMode {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Lockdown => "Lockdown",
+            Self::RemotePairing => "RPPairing",
+        }
+    }
+
+    fn default_file_name(self, udid: &str) -> String {
+        match self {
+            Self::Lockdown => format!("{udid}.plist"),
+            Self::RemotePairing => RP_PAIRING_FILE_NAME.to_string(),
+        }
+    }
+}
+
+#[derive(Clone)]
+enum PairingPayload {
+    Lockdown(PairingFile),
+    Remote(RpPairingFile),
+}
+
+impl PairingPayload {
+    fn bytes(&self) -> Result<Vec<u8>, IdeviceError> {
+        match self {
+            Self::Lockdown(pairing_file) => pairing_file.clone().serialize(),
+            Self::Remote(pairing_file) => Ok(pairing_file.to_bytes()),
+        }
+    }
+
+    fn display_string(&self) -> Result<String, IdeviceError> {
+        let serialized = String::from_utf8_lossy(&self.bytes()?).to_string();
+        Ok(serialized.trim_end().to_string())
+    }
+
+    fn as_lockdown(&self) -> Option<PairingFile> {
+        match self {
+            Self::Lockdown(pairing_file) => Some(pairing_file.clone()),
+            Self::Remote(_) => None,
+        }
+    }
+}
+
+fn supported_apps_for_mode(mode: PairingMode) -> HashMap<String, String> {
+    let mut supported_apps = HashMap::new();
+    match mode {
+        PairingMode::Lockdown => {
+            supported_apps.insert(
+                "SideStore".to_string(),
+                "ALTPairingFile.mobiledevicepairing".to_string(),
+            );
+            supported_apps.insert(
+                "LiveContainer".to_string(),
+                "SideStore/Documents/ALTPairingFile.mobiledevicepairing".to_string(),
+            );
+            supported_apps.insert("Feather".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("SparseBox".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("Protokolle".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("Antrag".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("ByeTunes".to_string(), "pairingFile.plist".to_string());
+        }
+        PairingMode::RemotePairing => {
+            supported_apps.insert("StikDebug".to_string(), RP_PAIRING_FILE_NAME.to_string());
+        }
+    }
+    supported_apps
+}
+
+fn pairing_hostname() -> String {
+    env::var("HOSTNAME")
+        .or_else(|_| env::var("COMPUTERNAME"))
+        .ok()
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or_else(|| "idevice_pair".to_string())
+}
+
+fn send_pairing_status(sender: &UnboundedSender<GuiCommands>, message: impl Into<String>) {
+    let _ = sender.send(GuiCommands::PairingStatus(message.into()));
+}
+
+async fn generate_remote_pairing_file(
+    provider: &dyn IdeviceProvider,
+    hostname: &str,
+    gui_sender: &UnboundedSender<GuiCommands>,
+) -> Result<RpPairingFile, IdeviceError> {
+    send_pairing_status(gui_sender, "Connecting to CoreDeviceProxy...");
+    let proxy = CoreDeviceProxy::connect(provider).await?;
+    let rsd_port = proxy.tunnel_info().server_rsd_port;
+    send_pairing_status(
+        gui_sender,
+        format!("CDTunnel established, RSD port {rsd_port}"),
+    );
+
+    send_pairing_status(gui_sender, "Starting TCP stack...");
+    let adapter = proxy.create_software_tunnel()?;
+    let mut adapter = adapter.to_async_handle();
+
+    send_pairing_status(gui_sender, "Performing RSD handshake...");
+    let rsd_stream = adapter.connect(rsd_port).await?;
+    let handshake = RsdHandshake::new(rsd_stream).await?;
+    send_pairing_status(
+        gui_sender,
+        format!("RSD: {} services", handshake.services.len()),
+    );
+    let tunnel_service = handshake
+        .services
+        .get("com.apple.internal.dt.coredevice.untrusted.tunnelservice")
+        .ok_or_else(|| IdeviceError::InternalError("Untrusted tunnel service not found".into()))?;
+
+    send_pairing_status(gui_sender, "Connecting to untrusted tunnel service...");
+    let tunnel_service_stream = adapter.connect(tunnel_service.port).await?;
+    let mut remote_xpc = RemoteXpcClient::new(tunnel_service_stream).await?;
+    remote_xpc.do_handshake().await?;
+    let _ = remote_xpc.recv_root().await;
+
+    send_pairing_status(gui_sender, "Starting RPPairing...");
+    send_pairing_status(gui_sender, "(You may need to tap Trust on the device)");
+    let mut pairing_file = RpPairingFile::generate(hostname);
+    let mut pairing_client = RemotePairingClient::new(remote_xpc, hostname, &mut pairing_file);
+    pairing_client
+        .connect(async |_| "000000".to_string(), ())
+        .await?;
+
+    Ok(pairing_file)
+}
+
 fn main() {
     println!("Startup");
     egui_logger::builder().init().unwrap();
     let (gui_sender, gui_recv) = unbounded_channel();
     let (idevice_sender, mut idevice_receiver) = unbounded_channel();
     idevice_sender.send(IdeviceCommands::GetDevices).unwrap();
-
-    let mut supported_apps = HashMap::new();
-    supported_apps.insert(
-        "SideStore".to_string(),
-        "ALTPairingFile.mobiledevicepairing".to_string(),
-    );
-    supported_apps.insert(
-        "LiveContainer".to_string(),
-        "SideStore/Documents/ALTPairingFile.mobiledevicepairing".to_string(),
-    );
-    supported_apps.insert("Feather".to_string(), "pairingFile.plist".to_string());
-    supported_apps.insert("StikDebug".to_string(), "pairingFile.plist".to_string());
-    supported_apps.insert("SparseBox".to_string(), "pairingFile.plist".to_string());
-    supported_apps.insert("Protokolle".to_string(), "pairingFile.plist".to_string());
-    supported_apps.insert("Antrag".to_string(), "pairingFile.plist".to_string());
-    supported_apps.insert("ByeTunes".to_string(), "pairingFile.plist".to_string());
 
     let app = MyApp {
         devices: None,
@@ -65,7 +188,9 @@ fn main() {
         save_error: None,
         installed_apps: None,
         install_res: HashMap::new(),
-        supported_apps,
+        pairing_mode: PairingMode::RemotePairing,
+        lockdown_supported_apps: supported_apps_for_mode(PairingMode::Lockdown),
+        remote_supported_apps: supported_apps_for_mode(PairingMode::RemotePairing),
         validate_res: None,
         validating: false,
         validation_ip_input: "".to_string(),
@@ -98,8 +223,7 @@ fn main() {
     #[cfg(not(target_os = "macos"))]
     {
         let icon_bytes: &[u8] = include_bytes!("../icon.png");
-        let d = eframe::icon_data::from_png_bytes(icon_bytes)
-            .expect("The icon data must be valid");
+        let d = eframe::icon_data::from_png_bytes(icon_bytes).expect("The icon data must be valid");
         options.viewport.icon = Some(std::sync::Arc::new(d));
     }
 
@@ -129,8 +253,8 @@ fn main() {
                                 match evt {
                                     Ok(UsbmuxdListenEvent::Connected(_))
                                     | Ok(UsbmuxdListenEvent::Disconnected(_)) => {
-                                        let _ = idevice_sender_listen
-                                            .send(IdeviceCommands::GetDevices);
+                                        let _ =
+                                            idevice_sender_listen.send(IdeviceCommands::GetDevices);
                                     }
                                     Err(e) => {
                                         log::warn!("usbmuxd listen error: {e:?}");
@@ -194,7 +318,11 @@ fn main() {
                                 };
 
                                 // Get device name for selection
-                                let device_name = match values.as_dictionary().and_then(|x|x.get("DeviceName")).and_then(|x|x.as_string()) {
+                                let device_name = match values
+                                    .as_dictionary()
+                                    .and_then(|x| x.get("DeviceName"))
+                                    .and_then(|x| x.as_string())
+                                {
                                     Some(n) => n.to_string(),
                                     _ => {
                                         continue;
@@ -347,56 +475,98 @@ fn main() {
                     pairing_file.udid = Some(dev.udid);
 
                     gui_sender
-                        .send(GuiCommands::PairingFile(Ok(pairing_file)))
+                        .send(GuiCommands::PairingFile(Ok(PairingPayload::Lockdown(
+                            pairing_file,
+                        ))))
                         .unwrap();
                 }
-                IdeviceCommands::GeneratePairingFile(dev) => {
-                    // Connect to usbmuxd
-                    let mut uc = match UsbmuxdConnection::default().await {
-                        Ok(u) => u,
-                        Err(e) => {
-                            gui_sender.send(GuiCommands::NoUsbmuxd(e)).unwrap();
-                            continue;
+                IdeviceCommands::GeneratePairingFile((dev, pairing_mode)) => {
+                    match pairing_mode {
+                        PairingMode::Lockdown => {
+                            // Connect to usbmuxd
+                            let mut uc = match UsbmuxdConnection::default().await {
+                                Ok(u) => u,
+                                Err(e) => {
+                                    gui_sender.send(GuiCommands::NoUsbmuxd(e)).unwrap();
+                                    continue;
+                                }
+                            };
+
+                            let p = dev.to_provider(UsbmuxdAddr::default(), "idevice_pair");
+
+                            let mut lc = match LockdownClient::connect(&p).await {
+                                Ok(l) => l,
+                                Err(e) => {
+                                    gui_sender.send(GuiCommands::PairingFile(Err(e))).unwrap();
+                                    continue;
+                                }
+                            };
+
+                            let buid = match uc.get_buid().await {
+                                Ok(b) => b,
+                                Err(e) => {
+                                    gui_sender.send(GuiCommands::PairingFile(Err(e))).unwrap();
+                                    continue;
+                                }
+                            };
+
+                            // Modify it slightly so iOS doesn't invalidate the one connected right now.
+                            let mut buid: Vec<char> = buid.chars().collect();
+                            buid[0] = if buid[0] == 'F' { 'A' } else { 'F' };
+                            let buid: String = buid.into_iter().collect();
+
+                            let id = uuid::Uuid::new_v4().to_string().to_uppercase();
+                            let mut pairing_file = match lc.pair(id, buid, None).await {
+                                Ok(p) => p,
+                                Err(e) => {
+                                    gui_sender.send(GuiCommands::PairingFile(Err(e))).unwrap();
+                                    continue;
+                                }
+                            };
+
+                            pairing_file.udid = Some(dev.udid.clone());
+
+                            gui_sender
+                                .send(GuiCommands::PairingFile(Ok(PairingPayload::Lockdown(
+                                    pairing_file,
+                                ))))
+                                .unwrap();
                         }
-                    };
+                        PairingMode::RemotePairing => {
+                            let provider = dev.to_provider(UsbmuxdAddr::default(), "idevice_pair");
+                            let hostname = pairing_hostname();
+                            let res = std::panic::AssertUnwindSafe(generate_remote_pairing_file(
+                                &provider,
+                                &hostname,
+                                &gui_sender,
+                            ))
+                            .catch_unwind()
+                            .await;
 
-                    let p = dev.to_provider(UsbmuxdAddr::default(), "idevice_pair");
-
-                    let mut lc = match LockdownClient::connect(&p).await {
-                        Ok(l) => l,
-                        Err(e) => {
-                            gui_sender.send(GuiCommands::PairingFile(Err(e))).unwrap();
-                            continue;
+                            match res {
+                                Ok(Ok(pairing_file)) => {
+                                    gui_sender
+                                        .send(GuiCommands::PairingFile(Ok(PairingPayload::Remote(
+                                            pairing_file,
+                                        ))))
+                                        .unwrap();
+                                }
+                                Ok(Err(e)) => {
+                                    gui_sender.send(GuiCommands::PairingFile(Err(e))).unwrap();
+                                }
+                                Err(_) => {
+                                    gui_sender
+                                        .send(GuiCommands::PairingFile(Err(
+                                            IdeviceError::InternalError(
+                                                "RPPairing generation failed unexpectedly"
+                                                    .to_string(),
+                                            ),
+                                        )))
+                                        .unwrap();
+                                }
+                            }
                         }
-                    };
-
-                    let buid = match uc.get_buid().await {
-                        Ok(b) => b,
-                        Err(e) => {
-                            gui_sender.send(GuiCommands::PairingFile(Err(e))).unwrap();
-                            continue;
-                        }
-                    };
-
-                    // Modify it slightly so iOS doesn't invalidate the one connected right now.
-                    let mut buid: Vec<char> = buid.chars().collect();
-                    buid[0] = if buid[0] == 'F' { 'A' } else { 'F' };
-                    let buid: String = buid.into_iter().collect();
-
-                    let id = uuid::Uuid::new_v4().to_string().to_uppercase();
-                    let mut pairing_file = match lc.pair(id, buid).await {
-                        Ok(p) => p,
-                        Err(e) => {
-                            gui_sender.send(GuiCommands::PairingFile(Err(e))).unwrap();
-                            continue;
-                        }
-                    };
-
-                    pairing_file.udid = Some(dev.udid.clone());
-
-                    gui_sender
-                        .send(GuiCommands::PairingFile(Ok(pairing_file)))
-                        .unwrap();
+                    }
                 }
                 IdeviceCommands::Validate((ip, pairing_file)) => {
                     let ip: IpAddr = match ip {
@@ -430,6 +600,49 @@ fn main() {
                     match lc.start_session(&pairing_file).await {
                         Ok(_) => gui_sender.send(GuiCommands::Validated(Ok(()))).unwrap(),
                         Err(e) => gui_sender.send(GuiCommands::Validated(Err(e))).unwrap(),
+                    }
+                }
+                IdeviceCommands::ValidateRemote((dev, mut pairing_file)) => {
+                    let provider = dev.to_provider(UsbmuxdAddr::default(), "idevice_pair");
+
+                    let res = std::panic::AssertUnwindSafe(async {
+                        let proxy = CoreDeviceProxy::connect(&provider).await?;
+                        let rsd_port = proxy.tunnel_info().server_rsd_port;
+                        let adapter = proxy.create_software_tunnel()?;
+                        let mut adapter = adapter.to_async_handle();
+
+                        let rsd_stream = adapter.connect(rsd_port).await?;
+                        let handshake = RsdHandshake::new(rsd_stream).await?;
+                        let tunnel_service = handshake
+                            .services
+                            .get("com.apple.internal.dt.coredevice.untrusted.tunnelservice")
+                            .ok_or_else(|| {
+                                IdeviceError::InternalError(
+                                    "Untrusted tunnel service not found".into(),
+                                )
+                            })?;
+
+                        let ts_stream = adapter.connect(tunnel_service.port).await?;
+                        let mut conn = RemoteXpcClient::new(ts_stream).await?;
+                        conn.do_handshake().await?;
+                        let _ = conn.recv_root().await;
+
+                        let hostname = pairing_hostname();
+                        let mut rpc = RemotePairingClient::new(conn, &hostname, &mut pairing_file);
+                        let _ = rpc.attempt_pair_verify().await?;
+                        rpc.validate_pairing().await
+                    })
+                    .catch_unwind()
+                    .await;
+
+                    match res {
+                        Ok(Ok(())) => gui_sender.send(GuiCommands::Validated(Ok(()))).unwrap(),
+                        Ok(Err(e)) => gui_sender.send(GuiCommands::Validated(Err(e))).unwrap(),
+                        Err(_) => gui_sender
+                            .send(GuiCommands::Validated(Err(IdeviceError::InternalError(
+                                "RPPairing validation failed unexpectedly".to_string(),
+                            ))))
+                            .unwrap(),
                     }
                 }
                 IdeviceCommands::InstalledApps((dev, desired_apps)) => {
@@ -512,7 +725,7 @@ fn main() {
                         }
                     };
 
-                    match f.write(&pairing_file.serialize().unwrap()).await {
+                    match f.write(&pairing_file).await {
                         Ok(_) => {
                             gui_sender
                                 .send(GuiCommands::InstallPairingFile((name, Ok(()))))
@@ -521,14 +734,18 @@ fn main() {
                         }
                         Err(e) => {
                             gui_sender
-                                .send(GuiCommands::InstallPairingFile((name, Err(IdeviceError::Socket(e)))))
+                                .send(GuiCommands::InstallPairingFile((
+                                    name,
+                                    Err(IdeviceError::Socket(e)),
+                                )))
                                 .unwrap();
                             continue;
                         }
                     }
-                }                IdeviceCommands::DiscoveredDevice((ip, mac)) => {
+                }
+                IdeviceCommands::DiscoveredDevice((ip, mac)) => {
                     discovered_devices.insert(mac, ip);
-                },
+                }
                 IdeviceCommands::GetDeviceInfo(dev) => {
                     let p = dev.to_provider(UsbmuxdAddr::default(), "idevice_pair");
                     let mut lc = match LockdownClient::connect(&p).await {
@@ -538,7 +755,7 @@ fn main() {
                             continue;
                         }
                     };
-                    
+
                     let values = match lc.get_value(None, None).await {
                         Ok(v) => v,
                         Err(e) => {
@@ -562,7 +779,7 @@ fn main() {
                         ("Device Name", "DeviceName"),
                         ("Model", "ProductType"),
                         ("iOS Version", "ProductVersion"),
-                        ("Build Number", "BuildVersion"), 
+                        ("Build Number", "BuildVersion"),
                         ("UDID", "UniqueDeviceID"),
                     ];
 
@@ -572,14 +789,21 @@ fn main() {
                         }
                     }
 
-                    gui_sender.send(GuiCommands::DeviceInfo(device_info)).unwrap();
+                    gui_sender
+                        .send(GuiCommands::DeviceInfo(device_info))
+                        .unwrap();
                 }
             };
         }
         eprintln!("Exited idevice loop!!");
     });
 
-    eframe::run_native(&format!("idevice pair v{}", env!("CARGO_PKG_VERSION")), options, Box::new(|_| Ok(Box::new(app)))).unwrap();
+    eframe::run_native(
+        &format!("idevice pair v{}", env!("CARGO_PKG_VERSION")),
+        options,
+        Box::new(|_| Ok(Box::new(app))),
+    )
+    .unwrap();
 }
 
 enum GuiCommands {
@@ -591,7 +815,8 @@ enum GuiCommands {
     EnableWirelessFailure(IdeviceError),
     DevMode(Result<bool, IdeviceError>),
     MountRes(Result<(), IdeviceError>),
-    PairingFile(Result<PairingFile, IdeviceError>),
+    PairingStatus(String),
+    PairingFile(Result<PairingPayload, IdeviceError>),
     Validated(Result<(), IdeviceError>),
     InstalledApps(Result<HashMap<String, String>, IdeviceError>),
     InstallPairingFile((String, Result<(), IdeviceError>)), // name
@@ -603,12 +828,13 @@ enum IdeviceCommands {
     CheckDevMode(UsbmuxdDevice),
     AutoMount(UsbmuxdDevice),
     LoadPairingFile(UsbmuxdDevice),
-    GeneratePairingFile(UsbmuxdDevice),
+    GeneratePairingFile((UsbmuxdDevice, PairingMode)),
     GetDeviceInfo(UsbmuxdDevice),
     Validate((Option<IpAddr>, PairingFile)),
+    ValidateRemote((UsbmuxdDevice, RpPairingFile)),
     InstalledApps((UsbmuxdDevice, Vec<String>)),
-    InstallPairingFile((UsbmuxdDevice, String, String, String, PairingFile)), // dev, name, b_id, install path, pf
-    DiscoveredDevice((IpAddr, String)),                                       // ip, mac
+    InstallPairingFile((UsbmuxdDevice, String, String, String, Vec<u8>)), // dev, name, b_id, install path, bytes
+    DiscoveredDevice((IpAddr, String)),                                   // ip, mac
 }
 
 struct MyApp {
@@ -616,7 +842,8 @@ struct MyApp {
     devices: Option<HashMap<String, UsbmuxdDevice>>,
     devices_placeholder: String,
     selected_device: String,
-      // Device details
+    pairing_mode: PairingMode,
+    // Device details
     device_info: Option<Vec<(String, String)>>,
 
     // Device info
@@ -625,14 +852,15 @@ struct MyApp {
     ddi_mounted: Option<Result<(), IdeviceError>>,
 
     // Pairing info
-    pairing_file: Option<PairingFile>,
+    pairing_file: Option<PairingPayload>,
     pairing_file_string: Option<String>,
     pairing_file_message: Option<String>,
 
     // Save
     save_error: Option<String>,
     installed_apps: Option<Result<HashMap<String, String>, IdeviceError>>,
-    supported_apps: HashMap<String, String>, // name, path to save pairing file to
+    lockdown_supported_apps: HashMap<String, String>, // name, path to save pairing file to
+    remote_supported_apps: HashMap<String, String>,   // name, path to save pairing file to
     install_res: HashMap<String, Option<Result<(), IdeviceError>>>,
 
     // Validation
@@ -647,10 +875,74 @@ struct MyApp {
     show_logs: bool,
 }
 
+impl MyApp {
+    fn supported_apps(&self) -> &HashMap<String, String> {
+        match self.pairing_mode {
+            PairingMode::Lockdown => &self.lockdown_supported_apps,
+            PairingMode::RemotePairing => &self.remote_supported_apps,
+        }
+    }
+
+    fn supported_app_names(&self) -> Vec<String> {
+        self.supported_apps().keys().cloned().collect()
+    }
+
+    fn reset_pairing_state(&mut self) {
+        self.pairing_file = None;
+        self.pairing_file_message = None;
+        self.pairing_file_string = None;
+        self.save_error = None;
+        self.installed_apps = None;
+        self.install_res.clear();
+        self.validating = false;
+        self.validate_res = None;
+        self.validation_ip_input.clear();
+    }
+
+    fn refresh_device_state(&mut self, dev: UsbmuxdDevice) {
+        self.wireless_enabled = None;
+        self.dev_mode_enabled = None;
+        self.ddi_mounted = None;
+        self.device_info = None;
+
+        let dev_clone = dev.clone();
+        self.idevice_sender
+            .send(IdeviceCommands::EnableWireless(dev_clone.clone()))
+            .unwrap();
+        self.idevice_sender
+            .send(IdeviceCommands::CheckDevMode(dev_clone.clone()))
+            .unwrap();
+        self.idevice_sender
+            .send(IdeviceCommands::AutoMount(dev_clone.clone()))
+            .unwrap();
+        self.idevice_sender
+            .send(IdeviceCommands::GetDeviceInfo(dev_clone))
+            .unwrap();
+
+        self.reset_pairing_state();
+        self.idevice_sender
+            .send(IdeviceCommands::InstalledApps((
+                dev,
+                self.supported_app_names(),
+            )))
+            .unwrap();
+    }
+
+    fn select_device(&mut self, device_name: String, dev: UsbmuxdDevice) {
+        self.selected_device = device_name;
+        self.refresh_device_state(dev);
+    }
+
+    fn push_pairing_status(&mut self, status: String) {
+        self.pairing_file_message = Some(status);
+    }
+}
+
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Get updates from the idevice thread
-        match self.gui_recv.try_recv() {            Ok(msg) => match msg {
+        match self.gui_recv.try_recv() {
+            Ok(msg) => match msg {
                 GuiCommands::NoUsbmuxd(idevice_error) => {
                     let install_msg = if cfg!(windows) {
                         "Make sure you have iTunes installed from Apple's website, and that it's running."
@@ -666,50 +958,17 @@ impl eframe::App for MyApp {
                 }
                 GuiCommands::Devices(vec) => {
                     self.devices = Some(vec);
-                    if self.selected_device.is_empty() || 
-                       (self.devices.as_ref().map_or(true, |devs| !devs.contains_key(&self.selected_device))) {
-                        if let Some(devs) = &self.devices {
-                            if devs.len() == 1 {
-                                if let Some((dev_name, dev)) = devs.iter().next() {
-                                    self.selected_device = dev_name.clone();
-
-                                    self.wireless_enabled = None;
-                                    self.dev_mode_enabled = None;
-                                    self.ddi_mounted = None;
-                                    self.device_info = None;
-
-                                    let dev_clone = dev.clone();
-                                    self.idevice_sender
-                                        .send(IdeviceCommands::EnableWireless(dev_clone.clone()))
-                                        .unwrap();
-                                    self.idevice_sender
-                                        .send(IdeviceCommands::CheckDevMode(dev_clone.clone()))
-                                        .unwrap();
-                                    self.idevice_sender
-                                        .send(IdeviceCommands::AutoMount(dev_clone.clone()))
-                                        .unwrap();
-                                    self.idevice_sender
-                                        .send(IdeviceCommands::GetDeviceInfo(dev_clone))
-                                        .unwrap();
-
-                                    self.pairing_file = None;
-                                    self.pairing_file_message = None;
-                                    self.pairing_file_string = None;
-                                    self.installed_apps = None;
-                                    self.device_info = None;
-                                    self.idevice_sender
-                                        .send(IdeviceCommands::InstalledApps((
-                                            dev.clone(),
-                                            self.supported_apps
-                                                .keys()
-                                                .map(|x| x.to_owned())
-                                                .collect(),
-                                        )))
-                                        .unwrap();
-                                    self.validating = false;
-                                    self.validate_res = None;
-                                }
-                            }
+                    if self.selected_device.is_empty()
+                        || (self
+                            .devices
+                            .as_ref()
+                            .is_none_or(|devs| !devs.contains_key(&self.selected_device)))
+                    {
+                        if let Some(devs) = self.devices.as_ref()
+                            && devs.len() == 1
+                        {
+                            let (dev_name, dev) = devs.iter().next().unwrap();
+                            self.select_device(dev_name.clone(), dev.clone());
                         }
                     }
                 }
@@ -729,14 +988,26 @@ impl eframe::App for MyApp {
                 GuiCommands::MountRes(res) => {
                     self.ddi_mounted = Some(res);
                 }
+                GuiCommands::PairingStatus(status) => {
+                    self.push_pairing_status(status);
+                }
                 GuiCommands::PairingFile(pairing_file) => match pairing_file {
                     Ok(p) => {
                         self.pairing_file = Some(p.clone());
                         self.pairing_file_message = None;
-                        self.pairing_file_string =
-                            Some(String::from_utf8_lossy(&p.serialize().unwrap()).to_string())
+                        self.pairing_file_string = match p.display_string() {
+                            Ok(serialized) => Some(serialized),
+                            Err(e) => {
+                                self.pairing_file_message = Some(e.to_string());
+                                None
+                            }
+                        };
                     }
-                    Err(e) => self.pairing_file_message = Some(e.to_string()),
+                    Err(e) => {
+                        self.pairing_file = None;
+                        self.pairing_file_string = None;
+                        self.pairing_file_message = Some(e.to_string());
+                    }
                 },
                 GuiCommands::Validated(res) => match res {
                     Ok(()) => self.validate_res = Some(Ok(())),
@@ -744,15 +1015,24 @@ impl eframe::App for MyApp {
                 },
                 GuiCommands::InstalledApps(apps) => self.installed_apps = Some(apps),
                 GuiCommands::InstallPairingFile((name, res)) => {
+                    let pairing_file_message = match &res {
+                        Ok(()) => format!("Installed pairing file into {name}."),
+                        Err(e) => format!("Failed to install pairing file into {name}: {e}"),
+                    };
                     if let Some(v) = self.install_res.get_mut(&name) {
-                        *v = Some(res)
+                        *v = Some(res);
                     }
+                    self.pairing_file_message = Some(pairing_file_message);
                 }
             },
             Err(e) => match e {
                 tokio::sync::mpsc::error::TryRecvError::Empty => {}
                 tokio::sync::mpsc::error::TryRecvError::Disconnected => {
-                    panic!("idevice crashed");
+                    self.devices_placeholder = "Device backend disconnected. Please retry the action or restart idevice_pair.".to_string();
+                    if self.pairing_file_message.is_none() {
+                        self.pairing_file_message =
+                            Some("Device backend disconnected.".to_string());
+                    }
                 }
             },
         }
@@ -792,7 +1072,8 @@ impl eframe::App for MyApp {
                         ui.toggle_value(&mut self.show_logs, "logs");
                     });
                 });
-                match &self.devices {
+                let mut pending_selection: Option<(String, UsbmuxdDevice)> = None;
+                match self.devices.as_ref() {
                     Some(devs) => {
                         if devs.is_empty() {
                             ui.label("No devices connected! Plug one in via USB.");
@@ -812,38 +1093,13 @@ impl eframe::App for MyApp {
                                                     )
                                                     .clicked()
                                                 {
-                                                    // Get device info immediately
-                                                    self.wireless_enabled = None;
-                                                    self.dev_mode_enabled = None;
-                                                    self.ddi_mounted = None;
-                                                    self.device_info = None;
-
-                                                    // Send all device info requests
-                                                    let dev_clone = dev.clone();
-                                                    self.idevice_sender
-                                                        .send(IdeviceCommands::EnableWireless(dev_clone.clone()))
-                                                        .unwrap();
-                                                    self.idevice_sender
-                                                        .send(IdeviceCommands::CheckDevMode(dev_clone.clone()))
-                                                        .unwrap();
-                                                    self.idevice_sender
-                                                        .send(IdeviceCommands::AutoMount(dev_clone.clone()))
-                                                        .unwrap();
-                                                    self.idevice_sender
-                                                        .send(IdeviceCommands::GetDeviceInfo(dev_clone))
-                                                        .unwrap();self.pairing_file = None;
-                                                    self.pairing_file_message = None;
-                                                    self.pairing_file_string = None;
-                                                    self.installed_apps = None;
-                                                    self.device_info = None;
-                                                    self.idevice_sender.send(IdeviceCommands::InstalledApps((dev.clone(), self.supported_apps.keys().map(|x| x.to_owned()).collect()))).unwrap();
-                                                    self.validating = false;
-                                                    self.validate_res = None;
+                                                    pending_selection =
+                                                        Some((dev_name.clone(), dev.clone()));
                                                 };
                                             }
                                         });
                                 });
-                                
+
                                 ui.separator();
 
                                 // Show device info to the right if available
@@ -864,14 +1120,46 @@ impl eframe::App for MyApp {
                         ui.label(&self.devices_placeholder);
                     }
                 }
+                if let Some((dev_name, dev)) = pending_selection {
+                    self.select_device(dev_name, dev);
+                }
 
                 ui.separator();
 
-                if let Some(dev) = self
+                let selected_device = self
                     .devices
                     .as_ref()
                     .and_then(|x| x.get(&self.selected_device))
-                {
+                    .cloned();
+                if let Some(dev) = selected_device {
+                    let mut pairing_mode_changed = false;
+                    ui.horizontal(|ui| {
+                        ui.label("Pairing Type:");
+                        pairing_mode_changed |= ui
+                            .radio_value(
+                                &mut self.pairing_mode,
+                                PairingMode::Lockdown,
+                                PairingMode::Lockdown.label(),
+                            )
+                            .changed();
+                        pairing_mode_changed |= ui
+                            .radio_value(
+                                &mut self.pairing_mode,
+                                PairingMode::RemotePairing,
+                                PairingMode::RemotePairing.label(),
+                            )
+                            .changed();
+                    });
+                    if pairing_mode_changed {
+                        self.reset_pairing_state();
+                        self.idevice_sender
+                            .send(IdeviceCommands::InstalledApps((
+                                dev.clone(),
+                                self.supported_app_names(),
+                            )))
+                            .unwrap();
+                    }
+
                     ui.horizontal(|ui| {
                         ui.label("Wireless Debugging:");
                         match &self.wireless_enabled {
@@ -910,33 +1198,62 @@ impl eframe::App for MyApp {
                     // How to load a file
                     ui.separator();
                     ui.horizontal(|ui| {
-                        ui.vertical(|ui| {
-                            ui.heading("Load");
-                            ui.label("Load the pairing file from the system.");
-                            if ui.button("Load").clicked() {
-                                #[cfg(not(feature = "generate"))]
-                                {
-                                    let ctrl_down = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
-                                    if ctrl_down && self.pairing_file.is_some() {
-                                        if let Some(p) = FileDialog::new()
-                                            .set_can_create_directories(true)
-                                            .set_title("Save Pairing File")
-                                            .set_file_name(format!("{}.plist", &dev.udid))
-                                            .save_file()
-                                        {
-                                            if let Err(e) = std::fs::write(
-                                                p,
-                                                self.pairing_file
+                        if self.pairing_mode == PairingMode::Lockdown {
+                            ui.vertical(|ui| {
+                                ui.heading("Load");
+                                ui.label("Load the pairing file from the system.");
+                                if ui.button("Load").clicked() {
+                                    #[cfg(not(feature = "generate"))]
+                                    {
+                                        let ctrl_down =
+                                            ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
+                                        if ctrl_down && self.pairing_file.is_some() {
+                                            if let Some(path) = FileDialog::new()
+                                                .set_can_create_directories(true)
+                                                .set_title("Save Pairing File")
+                                                .set_file_name(
+                                                    self.pairing_mode.default_file_name(&dev.udid),
+                                                )
+                                                .save_file()
+                                            {
+                                                self.save_error = None;
+                                                match self
+                                                    .pairing_file
                                                     .as_ref()
-                                                    .unwrap()
-                                                    .clone()
-                                                    .serialize()
-                                                    .unwrap(),
-                                            ) {
-                                                self.save_error = Some(e.to_string());
+                                                    .and_then(|pairing_file| {
+                                                        pairing_file.bytes().ok()
+                                                    })
+                                                {
+                                                    Some(bytes) => {
+                                                        if let Err(e) = std::fs::write(path, bytes)
+                                                        {
+                                                            self.save_error =
+                                                                Some(e.to_string());
+                                                        }
+                                                    }
+                                                    None => {
+                                                        self.save_error = Some(
+                                                            "Failed to serialize pairing file"
+                                                                .to_string(),
+                                                        )
+                                                    }
+                                                }
                                             }
+                                        } else {
+                                            self.pairing_file = None;
+                                            self.pairing_file_message =
+                                                Some("Loading...".to_string());
+                                            self.pairing_file_string = None;
+                                            self.save_error = None;
+                                            self.idevice_sender
+                                                .send(IdeviceCommands::LoadPairingFile(
+                                                    dev.clone(),
+                                                ))
+                                                .unwrap();
                                         }
-                                    } else {
+                                    }
+                                    #[cfg(feature = "generate")]
+                                    {
                                         self.pairing_file_message = Some("Loading...".to_string());
                                         self.pairing_file_string = None;
                                         self.idevice_sender
@@ -944,29 +1261,40 @@ impl eframe::App for MyApp {
                                             .unwrap();
                                     }
                                 }
-                                #[cfg(feature = "generate")]
-                                {
+                            });
+                            ui.separator();
+                        }
+                        let show_generate = match self.pairing_mode {
+                            PairingMode::RemotePairing => true,
+                            PairingMode::Lockdown => cfg!(feature = "generate"),
+                        };
+                        if show_generate {
+                            ui.vertical(|ui| {
+                                ui.heading("Generate");
+                                match self.pairing_mode {
+                                    PairingMode::Lockdown => {
+                                        ui.label(
+                                            "Generate a new pairing file. This may invalidate old ones.",
+                                        );
+                                    }
+                                    PairingMode::RemotePairing => {
+                                        ui.label("Generate an RPPairing file via CoreDeviceProxy.");
+                                    }
+                                }
+                                if ui.button("Generate").clicked() {
+                                    self.pairing_file = None;
                                     self.pairing_file_message = Some("Loading...".to_string());
                                     self.pairing_file_string = None;
+                                    self.save_error = None;
                                     self.idevice_sender
-                                        .send(IdeviceCommands::LoadPairingFile(dev.clone()))
+                                        .send(IdeviceCommands::GeneratePairingFile((
+                                            dev.clone(),
+                                            self.pairing_mode,
+                                        )))
                                         .unwrap();
                                 }
-                            }
-                        });
-                        ui.separator();
-                        #[cfg(feature = "generate")]
-                        ui.vertical(|ui| {
-                            ui.heading("Generate");
-                            ui.label("Generate a new pairing file. This may invalidate old ones.");
-                            if ui.button("Generate").clicked() {
-                                self.pairing_file_message = Some("Loading...".to_string());
-                                self.pairing_file_string = None;
-                                self.idevice_sender
-                                    .send(IdeviceCommands::GeneratePairingFile(dev.clone()))
-                                    .unwrap();
-                            }
-                        });
+                            });
+                        }
                     });
                     if let Some(msg) = &self.pairing_file_message {
                         ui.label(msg);
@@ -974,7 +1302,26 @@ impl eframe::App for MyApp {
 
                     ui.separator();
 
-                    if let Some(pairing_file) = &self.pairing_file_string {
+                    let pairing_file_text = self.pairing_file_string.clone();
+                    #[cfg(feature = "generate")]
+                    let pairing_file_name = self.pairing_mode.default_file_name(&dev.udid);
+                    let supported_apps = self.supported_apps().clone();
+                    let installed_apps = self
+                        .installed_apps
+                        .as_ref()
+                        .and_then(|apps| apps.as_ref().ok())
+                        .map(|apps| {
+                            apps.iter()
+                                .map(|(name, bundle_id)| (name.clone(), bundle_id.clone()))
+                                .collect::<Vec<_>>()
+                        });
+                    let installed_apps_error = self
+                        .installed_apps
+                        .as_ref()
+                        .and_then(|apps| apps.as_ref().err())
+                        .map(|e| e.to_string());
+
+                    if let Some(pairing_file) = pairing_file_text {
                         egui::Grid::new("reee").min_col_width(200.0).show(ui, |ui| {
                             ui.vertical(|ui| {
                                 #[cfg(feature = "generate")]
@@ -985,76 +1332,175 @@ impl eframe::App for MyApp {
                                     }
                                     ui.label("Save this file to your computer, and then transfer it to your device manually.");
                                     if ui.button("Save to File").clicked()
-                                        && let Some(p) = FileDialog::new()
+                                        && let Some(path) = FileDialog::new()
                                             .set_can_create_directories(true)
                                             .set_title("Save Pairing File")
-                                            .set_file_name(format!("{}.plist", &dev.udid))
+                                            .set_file_name(&pairing_file_name)
                                             .save_file()
-                                        {
+                                        && let Some(pairing_file) = &self.pairing_file
+                                    {
                                             self.save_error = None;
-                                            if let Err(e) = std::fs::write(
-                                                p,
-                                                self.pairing_file
-                                                    .as_ref()
-                                                    .unwrap()
-                                                    .clone()
-                                                    .serialize()
-                                                    .unwrap(),
-                                            ) {
-                                                self.save_error = Some(e.to_string());
+                                            match pairing_file.bytes() {
+                                                Ok(bytes) => {
+                                                    if let Err(e) = std::fs::write(path, bytes) {
+                                                        self.save_error = Some(e.to_string());
+                                                    }
+                                                }
+                                                Err(e) => self.save_error = Some(e.to_string()),
                                             }
-                                        
                                     }
 
                                     ui.separator();
                                 }
-                                ui.heading("Validation");
-                                ui.label("Verify that your pairing file works over LAN. Your device will be searched for over your network.");
-                                ui.add(egui::TextEdit::singleline(&mut self.validation_ip_input).hint_text("OR enter your device's IP..."));
-                                if ui.button("Validate").clicked() {
-                                    self.validating = true;
-                                    self.validate_res = None;
-                                    if self.validation_ip_input.is_empty() {
-                                        self.idevice_sender.send(IdeviceCommands::Validate((None, self.pairing_file.clone().unwrap()))).unwrap()
-                                    } else {
-                                        match IpAddr::from_str(self.validation_ip_input.as_str()) {
-                                            Ok(i) => {
-                                                self.idevice_sender.send(IdeviceCommands::Validate((Some(i), self.pairing_file.clone().unwrap()))).unwrap()
-                                            },
-                                            Err(_) => self.validate_res = Some(Err("Invalid IP".to_string()))
+                                if self.pairing_mode == PairingMode::Lockdown {
+                                    ui.heading("Validation");
+                                    ui.label("Verify that your pairing file works over LAN. Your device will be searched for over your network.");
+                                    ui.add(egui::TextEdit::singleline(&mut self.validation_ip_input).hint_text("OR enter your device's IP..."));
+                                    if ui.button("Validate").clicked() {
+                                        self.validating = true;
+                                        self.validate_res = None;
+                                        if let Some(pairing_file) = self
+                                            .pairing_file
+                                            .as_ref()
+                                            .and_then(PairingPayload::as_lockdown)
+                                        {
+                                            if self.validation_ip_input.is_empty() {
+                                                self.idevice_sender
+                                                    .send(IdeviceCommands::Validate((
+                                                        None,
+                                                        pairing_file,
+                                                    )))
+                                                    .unwrap()
+                                            } else {
+                                                match IpAddr::from_str(
+                                                    self.validation_ip_input.as_str(),
+                                                ) {
+                                                    Ok(i) => {
+                                                        self.idevice_sender
+                                                            .send(IdeviceCommands::Validate((
+                                                                Some(i),
+                                                                pairing_file,
+                                                            )))
+                                                            .unwrap()
+                                                    }
+                                                    Err(_) => {
+                                                        self.validate_res =
+                                                            Some(Err("Invalid IP".to_string()))
+                                                    }
+                                                };
+                                            }
+                                        } else {
+                                            self.validate_res = Some(Err(
+                                                "Validation only supports lockdown pairing files"
+                                                    .to_string(),
+                                            ));
+                                        }
+                                    }
+                                    if self.validating {
+                                        match &self.validate_res {
+                                            Some(Ok(_)) => ui.label(
+                                                RichText::new("Success").color(Color32::GREEN),
+                                            ),
+                                            Some(Err(e)) => {
+                                                ui.label(RichText::new(e).color(Color32::RED))
+                                            }
+                                            None => ui.label("Loading..."),
+                                        };
+                                    }
+                                } else {
+                                    ui.heading("Validation");
+                                    ui.label("Verify your RPPairing file over USB.");
+                                    if ui.button("Validate").clicked() {
+                                        self.validating = true;
+                                        self.validate_res = None;
+                                        if let Some(PairingPayload::Remote(pairing_file)) =
+                                            self.pairing_file.as_ref()
+                                        {
+                                            self.idevice_sender
+                                                .send(IdeviceCommands::ValidateRemote((
+                                                    dev.clone(),
+                                                    pairing_file.clone(),
+                                                )))
+                                                .unwrap();
+                                        } else {
+                                            self.validate_res = Some(Err(
+                                                "Validation requires an RPPairing file".to_string(),
+                                            ));
+                                        }
+                                    }
+                                    if self.validating {
+                                        match &self.validate_res {
+                                            Some(Ok(_)) => ui.label(
+                                                RichText::new("Success").color(Color32::GREEN),
+                                            ),
+                                            Some(Err(e)) => {
+                                                ui.label(RichText::new(e).color(Color32::RED))
+                                            }
+                                            None => ui.label("Loading..."),
                                         };
                                     }
                                 }
-                                if self.validating {
-                                    match &self.validate_res {
-                                        Some(Ok(_)) => ui.label(RichText::new("Success").color(Color32::GREEN)),
-                                        Some(Err(e)) =>ui.label(RichText::new(e).color(Color32::RED)),
-                                        None => ui.label("Loading..."),
-                                    };
-                                }
 
-                                match &self.installed_apps {
-                                    Some(Ok(apps)) => {
+                                match &installed_apps {
+                                    Some(apps) => {
                                         for (name, bundle_id) in apps {
                                             ui.separator();
                                             ui.heading(name);
                                             ui.label(RichText::new(bundle_id).italics().weak());
                                             ui.label(format!("{name} is installed on your device. You can automatically install the pairing file into the app."));
                                             if ui.button("Install").clicked() {
-                                                self.idevice_sender.send(IdeviceCommands::InstallPairingFile((dev.clone(), name.clone(), bundle_id.clone(), self.supported_apps.get(name).unwrap().to_owned(), self.pairing_file.clone().unwrap()))).unwrap();
-                                                self.install_res.insert(name.to_owned(), None);
+                                                if let Some(pairing_file) = &self.pairing_file {
+                                                    match pairing_file.bytes() {
+                                                        Ok(bytes) => {
+                                                            self.idevice_sender
+                                                                .send(IdeviceCommands::InstallPairingFile((
+                                                                    dev.clone(),
+                                                                    name.clone(),
+                                                                    bundle_id.clone(),
+                                                                    supported_apps
+                                                                        .get(name)
+                                                                        .unwrap()
+                                                                        .to_owned(),
+                                                                    bytes,
+                                                                )))
+                                                                .unwrap();
+                                                            self.install_res
+                                                                .insert(name.to_owned(), None);
+                                                            self.pairing_file_message = Some(
+                                                                format!(
+                                                                    "Sending pairing file to {name}..."
+                                                                ),
+                                                            );
+                                                        }
+                                                        Err(e) => {
+                                                            self.install_res.insert(
+                                                                name.to_owned(),
+                                                                Some(Err(e)),
+                                                            );
+                                                        }
+                                                    }
+                                                }
                                             }
                                             if let Some(v) = self.install_res.get(name) {
                                                 match v {
-                                                    Some(Ok(_)) => ui.label(RichText::new("Success").color(Color32::GREEN)),
-                                                    Some(Err(e)) => ui.label(RichText::new(e.to_string()).color(Color32::RED)),
+                                                    Some(Ok(_)) => ui
+                                                        .label(RichText::new("Success").color(Color32::GREEN)),
+                                                    Some(Err(e)) => ui
+                                                        .label(RichText::new(e.to_string()).color(Color32::RED)),
                                                     None => ui.label("Installing..."),
                                                 };
                                             }
                                         }
                                     }
-                                    Some(Err(e)) => {
-                                        ui.label(RichText::new(format!("Failed getting installed apps: {:?}", e.to_string())).color(Color32::RED));
+                                    None if installed_apps_error.is_some() => {
+                                        if let Some(error) = &installed_apps_error {
+                                            ui.label(
+                                                RichText::new(format!(
+                                                    "Failed getting installed apps: {error}"
+                                                ))
+                                                .color(Color32::RED),
+                                            );
+                                        }
                                     }
                                     None => {
                                         ui.label("Getting installed apps...");
@@ -1066,7 +1512,7 @@ impl eframe::App for MyApp {
                                 egui::Theme::Light => Color32::LIGHT_GRAY,
                             };
                             egui::frame::Frame::new().corner_radius(10).inner_margin(10).fill(p_background_color).show(ui, |ui| {
-                                ui.label(RichText::new(pairing_file).monospace());
+                                ui.label(RichText::new(&pairing_file).monospace());
                             });
                         });
                     }
