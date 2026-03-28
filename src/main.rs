@@ -912,6 +912,28 @@ impl MyApp {
         self.validation_ip_input.clear();
     }
 
+    fn save_pairing_file(&mut self, default_name: &str) {
+        if let Some(path) = FileDialog::new()
+            .set_can_create_directories(true)
+            .set_title("Save Pairing File")
+            .set_file_name(default_name)
+            .save_file()
+        {
+            self.save_error = None;
+            match self.pairing_file.as_ref() {
+                Some(pairing_file) => match pairing_file.bytes() {
+                    Ok(bytes) => {
+                        if let Err(e) = std::fs::write(path, bytes) {
+                            self.save_error = Some(e.to_string());
+                        }
+                    }
+                    Err(e) => self.save_error = Some(e.to_string()),
+                },
+                None => self.save_error = Some("No pairing file loaded".to_string()),
+            }
+        }
+    }
+
     fn refresh_device_state(&mut self, dev: UsbmuxdDevice) {
         self.wireless_enabled = None;
         self.dev_mode_enabled = None;
@@ -1218,40 +1240,11 @@ impl eframe::App for MyApp {
                                 if ui.button("Load").clicked() {
                                     #[cfg(not(feature = "generate"))]
                                     {
-                                        let ctrl_down =
-                                            ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
-                                        if ctrl_down && self.pairing_file.is_some() {
-                                            if let Some(path) = FileDialog::new()
-                                                .set_can_create_directories(true)
-                                                .set_title("Save Pairing File")
-                                                .set_file_name(
-                                                    self.pairing_mode.default_file_name(&dev.udid),
-                                                )
-                                                .save_file()
-                                            {
-                                                self.save_error = None;
-                                                match self
-                                                    .pairing_file
-                                                    .as_ref()
-                                                    .and_then(|pairing_file| {
-                                                        pairing_file.bytes().ok()
-                                                    })
-                                                {
-                                                    Some(bytes) => {
-                                                        if let Err(e) = std::fs::write(path, bytes)
-                                                        {
-                                                            self.save_error =
-                                                                Some(e.to_string());
-                                                        }
-                                                    }
-                                                    None => {
-                                                        self.save_error = Some(
-                                                            "Failed to serialize pairing file"
-                                                                .to_string(),
-                                                        )
-                                                    }
-                                                }
-                                            }
+                                        let shift_down = ui.input(|i| i.modifiers.shift);
+                                        if shift_down && self.pairing_file.is_some() {
+                                            let file_name =
+                                                self.pairing_mode.default_file_name(&dev.udid);
+                                            self.save_pairing_file(&file_name);
                                         } else {
                                             self.pairing_file = None;
                                             self.pairing_file_message =
@@ -1316,8 +1309,6 @@ impl eframe::App for MyApp {
                     ui.separator();
 
                     let pairing_file_text = self.pairing_file_string.clone();
-                    #[cfg(feature = "generate")]
-                    let pairing_file_name = self.pairing_mode.default_file_name(&dev.udid);
                     let supported_apps = self.supported_apps().clone();
                     let installed_apps = self
                         .installed_apps
@@ -1344,23 +1335,10 @@ impl eframe::App for MyApp {
                                         ui.label(RichText::new(msg).color(Color32::RED));
                                     }
                                     ui.label("Save this file to your computer, and then transfer it to your device manually.");
-                                    if ui.button("Save to File").clicked()
-                                        && let Some(path) = FileDialog::new()
-                                            .set_can_create_directories(true)
-                                            .set_title("Save Pairing File")
-                                            .set_file_name(&pairing_file_name)
-                                            .save_file()
-                                        && let Some(pairing_file) = &self.pairing_file
-                                    {
-                                            self.save_error = None;
-                                            match pairing_file.bytes() {
-                                                Ok(bytes) => {
-                                                    if let Err(e) = std::fs::write(path, bytes) {
-                                                        self.save_error = Some(e.to_string());
-                                                    }
-                                                }
-                                                Err(e) => self.save_error = Some(e.to_string()),
-                                            }
+                                    if ui.button("Save to File").clicked() {
+                                        let file_name =
+                                            self.pairing_mode.default_file_name(&dev.udid);
+                                        self.save_pairing_file(&file_name);
                                     }
 
                                     ui.separator();
@@ -1424,21 +1402,51 @@ impl eframe::App for MyApp {
                                     ui.heading("Validation");
                                     ui.label("Verify your RPPairing file over USB.");
                                     if ui.button("Validate").clicked() {
-                                        self.validating = true;
-                                        self.validate_res = None;
-                                        if let Some(PairingPayload::Remote(pairing_file)) =
-                                            self.pairing_file.as_ref()
+                                        #[cfg(not(feature = "generate"))]
+                                        if ui.input(|i| i.modifiers.shift)
+                                            && self.pairing_file.is_some()
                                         {
-                                            self.idevice_sender
-                                                .send(IdeviceCommands::ValidateRemote((
-                                                    dev.clone(),
-                                                    pairing_file.clone(),
-                                                )))
-                                                .unwrap();
+                                            let file_name =
+                                                self.pairing_mode.default_file_name(&dev.udid);
+                                            self.save_pairing_file(&file_name);
                                         } else {
-                                            self.validate_res = Some(Err(
-                                                "Validation requires an RPPairing file".to_string(),
-                                            ));
+                                            self.validating = true;
+                                            self.validate_res = None;
+                                            if let Some(PairingPayload::Remote(pairing_file)) =
+                                                self.pairing_file.as_ref()
+                                            {
+                                                self.idevice_sender
+                                                    .send(IdeviceCommands::ValidateRemote((
+                                                        dev.clone(),
+                                                        pairing_file.clone(),
+                                                    )))
+                                                    .unwrap();
+                                            } else {
+                                                self.validate_res = Some(Err(
+                                                    "Validation requires an RPPairing file"
+                                                        .to_string(),
+                                                ));
+                                            }
+                                        }
+                                        #[cfg(feature = "generate")]
+                                        {
+                                            self.validating = true;
+                                            self.validate_res = None;
+                                            if let Some(PairingPayload::Remote(pairing_file)) =
+                                                self.pairing_file.as_ref()
+                                            {
+                                                self.idevice_sender
+                                                    .send(IdeviceCommands::ValidateRemote((
+                                                        dev.clone(),
+                                                        pairing_file.clone(),
+                                                    )))
+                                                    .unwrap();
+                                            } else {
+                                                self.validate_res = Some(Err(
+                                                    "Validation requires an RPPairing file"
+                                                        .to_string(),
+                                                ));
+                                            }
                                         }
                                     }
                                     if self.validating {
