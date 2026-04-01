@@ -21,6 +21,7 @@ egui = "0.33.3"
 egui_logger = { version = "0.9" }
 eframe = { version = "0.33.3", default-features = false, features = [
   "default_fonts",
+  "accesskit",
   "wgpu",
   "glow",
   "wayland",
