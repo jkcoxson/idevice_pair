@@ -5,9 +5,8 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
 ## Features
 
 - **Device Management**: Automatically discover and connect to iOS devices via USB
-- **Developer Mode**: Monitor developer mode status
 - **Pairing Files**: Generate, load, and validate device pairing files
-- **App Integration**: Support for popular apps including:
+- **App Integration**: Support to install to popular apps including:
   - [SideStore](https://github.com/SideStore/SideStore)
   - [LiveContainer+SideStore](https://github.com/LiveContainer/LiveContainer)
   - [StikDebug](https://github.com/StephenDev0/StikDebug)
@@ -15,7 +14,7 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
   - [Feather](https://github.com/khcrysalis/Feather)
   - [Protokolle](https://github.com/khcrysalis/Protokolle)
   - [Antrag](https://github.com/khcrysalis/Antrag)
-- **Network Discovery**: Validate pairings for devices on the local network
+- **Developer Mode**: Monitor developer mode status
 - **Developer Disk Image Mounting**: Automatically mount required developer images
 
 ## Prerequisites
@@ -54,9 +53,9 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
 
 The application can generate and manage pairing files for various applications:
 
-1. **Load existing pairing file**: Click `Load` to import from your computer (recommended for lockdown)
-2. **Generate new pairing file**: Click `Generate` to create a fresh pairing
-3. **Save pairing file**: Export the pairing file to your computer or your supported applications
+1. **Generate new pairing file**: Click `Generate` to create a fresh pairing (recommended for RPPairing)
+2. **Load existing pairing file**: Click `Load` to import from your computer (recommended for lockdown)
+3. **Save pairing file**: Export the pairing file to your computer or install to your supported applications
 4. **Validate pairing**: Test the pairing file against a local network-connected device
 
 ## Pairing Guide
@@ -140,9 +139,9 @@ For a complete list of dependencies, see [`Cargo.toml`](Cargo.toml).
 - Try disconnecting and reconnecting the device
 
 ### Pairing File Issues
-- Ensure developer mode is enabled on your iOS device
+- Ensure Developer Mode is enabled on your iOS device
 - Verify the pairing file format matches your target application (.plist or .mobiledevicepairing)
-- Try creating a fresh pairing file using the `load` button if it doesn't function as expected
+- Try creating a fresh pairing file using the Ggenerate` (RPPairing) or `Load` (Lockdown) button and reinstalling it if it doesn't function as expected
   
 ### Wireless Connection Issues
 - Verify both devices are on the same network
