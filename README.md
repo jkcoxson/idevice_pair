@@ -53,8 +53,8 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
 
 The application can generate and manage pairing files for various applications:
 
-1. **Generate new pairing file**: Click `Generate` to create a fresh pairing (recommended for RPPairing)
-2. **Load existing pairing file**: Click `Load` to import from your computer (recommended for lockdown)
+1. **Generate new pairing file**: Click `Generate` to create a fresh pairing
+2. **Load existing pairing file**: Click `Load` to import from your computer (recommended for Lockdown)
 3. **Save pairing file**: Export the pairing file to your computer or install to your supported applications
 4. **Validate pairing**: Test the pairing file against a local network-connected device
 
