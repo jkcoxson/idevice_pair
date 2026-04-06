@@ -141,7 +141,7 @@ For a complete list of dependencies, see [`Cargo.toml`](Cargo.toml).
 ### Pairing File Issues
 - Ensure Developer Mode is enabled on your iOS device
 - Verify the pairing file format matches your target application (.plist or .mobiledevicepairing)
-- Try creating a fresh pairing file using the Ggenerate` (RPPairing) or `Load` (Lockdown) button and reinstalling it if it doesn't function as expected
+- Try creating a fresh pairing file using the `Generate` (RPPairing) or `Load` (Lockdown) button and reinstalling it if it doesn't function as expected
   
 ### Wireless Connection Issues
 - Verify both devices are on the same network
