@@ -32,6 +32,9 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 mod discover;
 mod mount;
 
+rust_i18n::i18n!("locales", fallback = "en");
+use rust_i18n::t;
+
 const RP_PAIRING_FILE_NAME: &str = "rp_pairing_file.plist";
 const STIKDEBUG_APPSTORE_BUNDLE_ID: &str = "com.stik.sj";
 
@@ -42,12 +45,6 @@ enum PairingMode {
 }
 
 impl PairingMode {
-    fn label(self) -> &'static str {
-        match self {
-            Self::Lockdown => "Lockdown",
-            Self::RemotePairing => "RPPairing",
-        }
-    }
 
     fn default_file_name(self, udid: &str) -> String {
         match self {
@@ -131,38 +128,38 @@ async fn generate_remote_pairing_file(
     hostname: &str,
     gui_sender: &UnboundedSender<GuiCommands>,
 ) -> Result<RpPairingFile, IdeviceError> {
-    send_pairing_status(gui_sender, "Connecting to CoreDeviceProxy...");
+    send_pairing_status(gui_sender, t!("connecting_coredevice"));
     let proxy = CoreDeviceProxy::connect(provider).await?;
     let rsd_port = proxy.tunnel_info().server_rsd_port;
     send_pairing_status(
         gui_sender,
-        format!("CDTunnel established, RSD port {rsd_port}"),
+        t!("cdtunnel_established", port = rsd_port.to_string()),
     );
 
-    send_pairing_status(gui_sender, "Starting TCP stack...");
+    send_pairing_status(gui_sender, t!("starting_tcp"));
     let adapter = proxy.create_software_tunnel()?;
     let mut adapter = adapter.to_async_handle();
 
-    send_pairing_status(gui_sender, "Performing RSD handshake...");
+    send_pairing_status(gui_sender, t!("performing_rsd"));
     let rsd_stream = adapter.connect(rsd_port).await?;
     let handshake = RsdHandshake::new(rsd_stream).await?;
     send_pairing_status(
         gui_sender,
-        format!("RSD: {} services", handshake.services.len()),
+        t!("rsd_services", count = handshake.services.len().to_string()),
     );
     let tunnel_service = handshake
         .services
         .get("com.apple.internal.dt.coredevice.untrusted.tunnelservice")
         .ok_or_else(|| IdeviceError::InternalError("Untrusted tunnel service not found".into()))?;
 
-    send_pairing_status(gui_sender, "Connecting to untrusted tunnel service...");
+    send_pairing_status(gui_sender, t!("connecting_untrusted"));
     let tunnel_service_stream = adapter.connect(tunnel_service.port).await?;
     let mut remote_xpc = RemoteXpcClient::new(tunnel_service_stream).await?;
     remote_xpc.do_handshake().await?;
     let _ = remote_xpc.recv_root().await;
 
-    send_pairing_status(gui_sender, "Starting RPPairing...");
-    send_pairing_status(gui_sender, "(You may need to tap Trust on the device)");
+    send_pairing_status(gui_sender, t!("starting_rp"));
+    send_pairing_status(gui_sender, t!("trust_device"));
     let mut pairing_file = RpPairingFile::generate(hostname);
     let mut pairing_client = RemotePairingClient::new(remote_xpc, hostname, &mut pairing_file);
     pairing_client
@@ -170,6 +167,53 @@ async fn generate_remote_pairing_file(
         .await?;
 
     Ok(pairing_file)
+}
+
+fn setup_custom_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+
+    // Cross-platform font search paths for CJK (Chinese) support
+    let font_paths = [
+        "/System/Library/Fonts/PingFang.ttc",
+        "/System/Library/Fonts/STHeiti Light.ttc",
+        "/System/Library/Fonts/Supplemental/Songti.ttc",
+        "/Library/Fonts/Arial Unicode.ttf",
+        "C:\\Windows\\Fonts\\msyh.ttc",
+        "C:\\Windows\\Fonts\\msyh.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/wenquanyi/wqy-zenhei.ttc",
+    ];
+
+    let mut found_path = None;
+    for path in font_paths {
+        if std::path::Path::new(path).exists() {
+            if let Ok(font_data) = std::fs::read(path) {
+                fonts.font_data.insert(
+                    "cjk_font".to_owned(),
+                    egui::FontData::from_owned(font_data).into(),
+                );
+                found_path = Some(path);
+                break;
+            }
+        }
+    }
+
+    if let Some(path) = found_path {
+        println!("Loading font from: {}", path);
+        fonts
+            .families
+            .get_mut(&egui::FontFamily::Proportional)
+            .unwrap()
+            .insert(0, "cjk_font".to_owned());
+        fonts
+            .families
+            .get_mut(&egui::FontFamily::Monospace)
+            .unwrap()
+            .insert(0, "cjk_font".to_owned());
+        ctx.set_fonts(fonts);
+    } else {
+        eprintln!("Warning: No CJK font found on this system. Chinese characters might not display correctly.");
+    }
 }
 
 fn main() {
@@ -181,7 +225,7 @@ fn main() {
 
     let app = MyApp {
         devices: None,
-        devices_placeholder: "Loading...".to_string(),
+        devices_placeholder: t!("loading").to_string(),
         selected_device: "".to_string(),
         device_info: None,
         wireless_enabled: None,
@@ -785,20 +829,20 @@ fn main() {
                         }
                     };
 
-                    let mut device_info = Vec::with_capacity(5);
+                    let mut device_info: Vec<(String, String)> = Vec::with_capacity(5);
 
                     // Fixed order of fields in reverse order
                     let fields = [
-                        ("Device Name", "DeviceName"),
-                        ("Model", "ProductType"),
-                        ("iOS Version", "ProductVersion"),
-                        ("Build Number", "BuildVersion"),
-                        ("UDID", "UniqueDeviceID"),
+                        ("device_name", "DeviceName"),
+                        ("model", "ProductType"),
+                        ("ios_version", "ProductVersion"),
+                        ("build_number", "BuildVersion"),
+                        ("udid", "UniqueDeviceID"),
                     ];
 
-                    for (display_name, key) in fields.iter() {
-                        if let Some(plist::Value::String(value)) = values.get(key) {
-                            device_info.push((display_name.to_string(), value.clone()));
+                    for (key_id, lockdown_key) in fields.iter() {
+                        if let Some(plist::Value::String(value)) = values.get(*lockdown_key) {
+                            device_info.push((key_id.to_string(), value.clone()));
                         }
                     }
 
@@ -814,7 +858,10 @@ fn main() {
     eframe::run_native(
         &format!("idevice pair v{}", env!("CARGO_PKG_VERSION")),
         options,
-        Box::new(|_| Ok(Box::new(app))),
+        Box::new(|cc| {
+            setup_custom_fonts(&cc.egui_ctx);
+            Ok(Box::new(app))
+        }),
     )
     .unwrap();
 }
@@ -915,7 +962,7 @@ impl MyApp {
     fn save_pairing_file(&mut self, default_name: &str) {
         if let Some(path) = FileDialog::new()
             .set_can_create_directories(true)
-            .set_title("Save Pairing File")
+            .set_title(t!("save_to_file"))
             .set_file_name(default_name)
             .save_file()
         {
@@ -980,15 +1027,16 @@ impl eframe::App for MyApp {
             Ok(msg) => match msg {
                 GuiCommands::NoUsbmuxd(idevice_error) => {
                     let install_msg = if cfg!(windows) {
-                        "Make sure you have iTunes installed from Apple's website, and that it's running."
+                        t!("itunes_help")
                     } else if cfg!(target_os = "macos") {
-                        "usbmuxd should be running by default on MacOS. Please raise an issue on GitHub."
+                        t!("macos_usbmuxd_help")
                     } else {
-                        "Make sure usbmuxd is installed and running."
+                        t!("linux_usbmuxd_help")
                     };
 
                     self.devices_placeholder = format!(
-                        "Failed to connect to usbmuxd! {install_msg}\n\n{idevice_error:#?}"
+                        "{} {install_msg}\n\n{idevice_error:#?}",
+                        t!("no_usbmuxd")
                     );
                 }
                 GuiCommands::Devices(vec) => {
@@ -1009,9 +1057,7 @@ impl eframe::App for MyApp {
                 }
                 GuiCommands::DeviceInfo(info) => self.device_info = Some(info),
                 GuiCommands::GetDevicesFailure(idevice_error) => {
-                    self.devices_placeholder = format!(
-                        "Failed to get list of connected devices from usbmuxd! {idevice_error:?}"
-                    );
+                    self.devices_placeholder = t!("get_devices_failure", error = format!("{idevice_error:?}")).to_string();
                 }
                 GuiCommands::EnabledWireless => self.wireless_enabled = Some(Ok(())),
                 GuiCommands::EnableWirelessFailure(idevice_error) => {
@@ -1051,8 +1097,8 @@ impl eframe::App for MyApp {
                 GuiCommands::InstalledApps(apps) => self.installed_apps = Some(apps),
                 GuiCommands::InstallPairingFile((name, res)) => {
                     let pairing_file_message = match &res {
-                        Ok(()) => format!("Installed pairing file into {name}."),
-                        Err(e) => format!("Failed to install pairing file into {name}: {e}"),
+                        Ok(()) => t!("install_success", name = name.clone()).to_string(),
+                        Err(e) => t!("install_failed", name = name.clone(), error = e.to_string()).to_string(),
                     };
                     if let Some(v) = self.install_res.get_mut(&name) {
                         *v = Some(res);
@@ -1063,16 +1109,16 @@ impl eframe::App for MyApp {
             Err(e) => match e {
                 tokio::sync::mpsc::error::TryRecvError::Empty => {}
                 tokio::sync::mpsc::error::TryRecvError::Disconnected => {
-                    self.devices_placeholder = "Device backend disconnected. Please retry the action or restart idevice_pair.".to_string();
+                    self.devices_placeholder = t!("backend_disconnected").to_string();
                     if self.pairing_file_message.is_none() {
                         self.pairing_file_message =
-                            Some("Device backend disconnected.".to_string());
+                            Some(t!("backend_disconnected").to_string());
                     }
                 }
             },
         }
         if self.show_logs {
-            egui::Window::new("logs")
+            egui::Window::new(t!("logs"))
                 .open(&mut self.show_logs)
                 .show(ctx, |ui| {
                     egui_logger::logger_ui()
@@ -1097,25 +1143,39 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.heading("idevice pair");
+                    ui.heading(t!("app_title"));
                     ui.separator();
                     let p_background_color = match ctx.theme() {
                         egui::Theme::Dark => Color32::BLACK,
                         egui::Theme::Light => Color32::LIGHT_GRAY,
                     };
                     egui::frame::Frame::new().corner_radius(3).inner_margin(3).fill(p_background_color).show(ui, |ui| {
-                        ui.toggle_value(&mut self.show_logs, "logs");
+                        ui.horizontal(|ui| {
+                            ui.toggle_value(&mut self.show_logs, t!("logs"));
+                            ui.separator();
+                            let current_locale = rust_i18n::locale();
+                            ComboBox::from_id_salt("lang_selector")
+                                .selected_text(t!("_language_name"))
+                                .show_ui(ui, |ui| {
+                                    for locale in rust_i18n::available_locales!() {
+                                        let label = t!("_language_name", locale = locale);
+                                        if ui.selectable_label(&*current_locale == locale, label).clicked() {
+                                            rust_i18n::set_locale(locale);
+                                        }
+                                    }
+                                });
+                        });
                     });
                 });
                 let mut pending_selection: Option<(String, UsbmuxdDevice)> = None;
                 match self.devices.as_ref() {
                     Some(devs) => {
                         if devs.is_empty() {
-                            ui.label("No devices connected! Plug one in via USB.");
+                            ui.label(t!("no_devices"));
                         } else {
                             ui.horizontal(|ui| {
                                 ui.vertical(|ui| {
-                                    ui.label("Choose a device");
+                                    ui.label(t!("choose_device"));
                                     ComboBox::from_label("")
                                         .selected_text(&self.selected_device)
                                         .show_ui(ui, |ui| {
@@ -1142,7 +1202,7 @@ impl eframe::App for MyApp {
                                     ui.vertical(|ui| {
                                         for (key, value) in info {
                                             ui.horizontal(|ui| {
-                                                ui.label(format!("{}:", key));
+                                                ui.label(format!("{}:", t!(key.as_str())));
                                                 ui.label(value);
                                             });
                                         }
@@ -1169,19 +1229,19 @@ impl eframe::App for MyApp {
                 if let Some(dev) = selected_device {
                     let mut pairing_mode_changed = false;
                     ui.horizontal(|ui| {
-                        ui.label("Pairing Type:");
+                        ui.label(t!("pairing_type"));
                         pairing_mode_changed |= ui
                             .radio_value(
                                 &mut self.pairing_mode,
                                 PairingMode::Lockdown,
-                                PairingMode::Lockdown.label(),
+                                t!("lockdown"),
                             )
                             .changed();
                         pairing_mode_changed |= ui
                             .radio_value(
                                 &mut self.pairing_mode,
                                 PairingMode::RemotePairing,
-                                PairingMode::RemotePairing.label(),
+                                t!("rp_pairing"),
                             )
                             .changed();
                     });
@@ -1196,37 +1256,37 @@ impl eframe::App for MyApp {
                     }
 
                     ui.horizontal(|ui| {
-                        ui.label("Wireless Debugging:");
+                        ui.label(t!("wireless_debugging"));
                         match &self.wireless_enabled {
-                            Some(Ok(_)) => ui.label(RichText::new("Enabled").color(Color32::GREEN)),
+                            Some(Ok(_)) => ui.label(RichText::new(t!("enabled")).color(Color32::GREEN)),
                             Some(Err(e)) => ui
-                                .label(RichText::new(format!("Failed: {e:?}")).color(Color32::RED)),
-                            None => ui.label("Loading..."),
+                                .label(RichText::new(format!("{}: {e:?}", t!("failed"))).color(Color32::RED)),
+                            None => ui.label(t!("loading")),
                         };
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Developer Mode:");
+                        ui.label(t!("developer_mode"));
                         match &self.dev_mode_enabled {
                             Some(Ok(true)) => {
-                                ui.label(RichText::new("Enabled").color(Color32::GREEN))
+                                ui.label(RichText::new(t!("enabled")).color(Color32::GREEN))
                             }
                             Some(Ok(false)) => {
-                                ui.label(RichText::new("Disabled!").color(Color32::RED))
+                                ui.label(RichText::new(t!("disabled")).color(Color32::RED))
                             }
                             Some(Err(e)) => ui
-                                .label(RichText::new(format!("Failed: {e:?}")).color(Color32::RED)),
-                            None => ui.label("Loading..."),
+                                .label(RichText::new(format!("{}: {e:?}", t!("failed"))).color(Color32::RED)),
+                            None => ui.label(t!("loading")),
                         };
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Developer Disk Image (iOS 17+):");
+                        ui.label(t!("ddi_image"));
                         match &self.ddi_mounted {
                             Some(Ok(_)) => {
-                                ui.label(RichText::new("Mounted").color(Color32::GREEN))
+                                ui.label(RichText::new(t!("mounted")).color(Color32::GREEN))
                             }
                             Some(Err(e)) => ui
-                                .label(RichText::new(format!("Failed: {e:?}")).color(Color32::RED)),
-                            None => ui.label("Loading..."),
+                                .label(RichText::new(format!("{}: {e:?}", t!("failed"))).color(Color32::RED)),
+                            None => ui.label(t!("loading")),
                         };
                     });
 
@@ -1235,9 +1295,9 @@ impl eframe::App for MyApp {
                     ui.horizontal(|ui| {
                         if self.pairing_mode == PairingMode::Lockdown {
                             ui.vertical(|ui| {
-                                ui.heading("Load");
-                                ui.label("Load the pairing file from the system.");
-                                if ui.button("Load").clicked() {
+                                ui.heading(t!("load"));
+                                ui.label(t!("load_help"));
+                                if ui.button(t!("load")).clicked() {
                                     #[cfg(not(feature = "generate"))]
                                     {
                                         let shift_down = ui.input(|i| i.modifiers.shift);
@@ -1248,7 +1308,7 @@ impl eframe::App for MyApp {
                                         } else {
                                             self.pairing_file = None;
                                             self.pairing_file_message =
-                                                Some("Loading...".to_string());
+                                                Some(t!("loading").to_string());
                                             self.pairing_file_string = None;
                                             self.save_error = None;
                                             self.idevice_sender
@@ -1260,7 +1320,7 @@ impl eframe::App for MyApp {
                                     }
                                     #[cfg(feature = "generate")]
                                     {
-                                        self.pairing_file_message = Some("Loading...".to_string());
+                                        self.pairing_file_message = Some(t!("loading").to_string());
                                         self.pairing_file_string = None;
                                         self.idevice_sender
                                             .send(IdeviceCommands::LoadPairingFile(dev.clone()))
@@ -1276,20 +1336,18 @@ impl eframe::App for MyApp {
                         };
                         if show_generate {
                             ui.vertical(|ui| {
-                                ui.heading("Generate");
+                                ui.heading(t!("generate"));
                                 match self.pairing_mode {
                                     PairingMode::Lockdown => {
-                                        ui.label(
-                                            "Generate a new pairing file. This may invalidate old ones.",
-                                        );
+                                        ui.label(t!("generate_lockdown_help"));
                                     }
                                     PairingMode::RemotePairing => {
-                                        ui.label("Generate an RPPairing file via CoreDeviceProxy.");
+                                        ui.label(t!("generate_rp_help"));
                                     }
                                 }
-                                if ui.button("Generate").clicked() {
+                                if ui.button(t!("generate")).clicked() {
                                     self.pairing_file = None;
-                                    self.pairing_file_message = Some("Loading...".to_string());
+                                    self.pairing_file_message = Some(t!("loading").to_string());
                                     self.pairing_file_string = None;
                                     self.save_error = None;
                                     self.idevice_sender
@@ -1330,12 +1388,12 @@ impl eframe::App for MyApp {
                             ui.vertical(|ui| {
                                 #[cfg(feature = "generate")]
                                 {
-                                    ui.heading("Save to File");
+                                    ui.heading(t!("save_to_file"));
                                     if let Some(msg) = &self.save_error {
                                         ui.label(RichText::new(msg).color(Color32::RED));
                                     }
-                                    ui.label("Save this file to your computer, and then transfer it to your device manually.");
-                                    if ui.button("Save to File").clicked() {
+                                    ui.label(t!("save_to_file_help"));
+                                    if ui.button(t!("save_to_file")).clicked() {
                                         let file_name =
                                             self.pairing_mode.default_file_name(&dev.udid);
                                         self.save_pairing_file(&file_name);
@@ -1344,10 +1402,10 @@ impl eframe::App for MyApp {
                                     ui.separator();
                                 }
                                 if self.pairing_mode == PairingMode::Lockdown {
-                                    ui.heading("Validation");
-                                    ui.label("Verify that your pairing file works over LAN. Your device will be searched for over your network.");
-                                    ui.add(egui::TextEdit::singleline(&mut self.validation_ip_input).hint_text("OR enter your device's IP..."));
-                                    if ui.button("Validate").clicked() {
+                                    ui.heading(t!("validation"));
+                                    ui.label(t!("validate_lan_help"));
+                                    ui.add(egui::TextEdit::singleline(&mut self.validation_ip_input).hint_text(t!("validate_ip_hint")));
+                                    if ui.button(t!("validate")).clicked() {
                                         self.validating = true;
                                         self.validate_res = None;
                                         if let Some(pairing_file) = self
@@ -1376,32 +1434,31 @@ impl eframe::App for MyApp {
                                                     }
                                                     Err(_) => {
                                                         self.validate_res =
-                                                            Some(Err("Invalid IP".to_string()))
+                                                            Some(Err(t!("invalid_ip").to_string()))
                                                     }
                                                 };
                                             }
                                         } else {
                                             self.validate_res = Some(Err(
-                                                "Validation only supports lockdown pairing files"
-                                                    .to_string(),
+                                                t!("validate_only_lockdown").to_string(),
                                             ));
                                         }
                                     }
                                     if self.validating {
                                         match &self.validate_res {
                                             Some(Ok(_)) => ui.label(
-                                                RichText::new("Success").color(Color32::GREEN),
+                                                RichText::new(t!("validation_success")).color(Color32::GREEN),
                                             ),
                                             Some(Err(e)) => {
                                                 ui.label(RichText::new(e).color(Color32::RED))
                                             }
-                                            None => ui.label("Loading..."),
+                                            None => ui.label(t!("loading")),
                                         };
                                     }
                                 } else {
-                                    ui.heading("Validation");
-                                    ui.label("Verify your RPPairing file over USB.");
-                                    if ui.button("Validate").clicked() {
+                                    ui.heading(t!("validation"));
+                                    ui.label(t!("validate_usb_help"));
+                                    if ui.button(t!("validate")).clicked() {
                                         #[cfg(not(feature = "generate"))]
                                         if ui.input(|i| i.modifiers.shift)
                                             && self.pairing_file.is_some()
@@ -1423,8 +1480,7 @@ impl eframe::App for MyApp {
                                                     .unwrap();
                                             } else {
                                                 self.validate_res = Some(Err(
-                                                    "Validation requires an RPPairing file"
-                                                        .to_string(),
+                                                    t!("validate_requires_rp").to_string(),
                                                 ));
                                             }
                                         }
@@ -1443,8 +1499,7 @@ impl eframe::App for MyApp {
                                                     .unwrap();
                                             } else {
                                                 self.validate_res = Some(Err(
-                                                    "Validation requires an RPPairing file"
-                                                        .to_string(),
+                                                    t!("validate_requires_rp").to_string(),
                                                 ));
                                             }
                                         }
@@ -1452,12 +1507,12 @@ impl eframe::App for MyApp {
                                     if self.validating {
                                         match &self.validate_res {
                                             Some(Ok(_)) => ui.label(
-                                                RichText::new("Success").color(Color32::GREEN),
+                                                RichText::new(t!("validation_success")).color(Color32::GREEN),
                                             ),
                                             Some(Err(e)) => {
                                                 ui.label(RichText::new(e).color(Color32::RED))
                                             }
-                                            None => ui.label("Loading..."),
+                                            None => ui.label(t!("loading")),
                                         };
                                     }
                                 }
@@ -1468,8 +1523,8 @@ impl eframe::App for MyApp {
                                             ui.separator();
                                             ui.heading(name);
                                             ui.label(RichText::new(bundle_id).italics().weak());
-                                            ui.label(format!("{name} is installed on your device. You can automatically install the pairing file into the app."));
-                                            if ui.button("Install").clicked() {
+                                            ui.label(t!("app_install_help", name = name.clone()));
+                                            if ui.button(t!("install")).clicked() {
                                                 if let Some(pairing_file) = &self.pairing_file {
                                                     match pairing_file.bytes() {
                                                         Ok(bytes) => {
@@ -1488,9 +1543,7 @@ impl eframe::App for MyApp {
                                                             self.install_res
                                                                 .insert(name.to_owned(), None);
                                                             self.pairing_file_message = Some(
-                                                                format!(
-                                                                    "Sending pairing file to {name}..."
-                                                                ),
+                                                                t!("install_sending", name = name.clone()).to_string(),
                                                             );
                                                         }
                                                         Err(e) => {
@@ -1505,10 +1558,10 @@ impl eframe::App for MyApp {
                                             if let Some(v) = self.install_res.get(name) {
                                                 match v {
                                                     Some(Ok(_)) => ui
-                                                        .label(RichText::new("Success").color(Color32::GREEN)),
+                                                        .label(RichText::new(t!("validation_success")).color(Color32::GREEN)),
                                                     Some(Err(e)) => ui
                                                         .label(RichText::new(e.to_string()).color(Color32::RED)),
-                                                    None => ui.label("Installing..."),
+                                                    None => ui.label(t!("installing")),
                                                 };
                                             }
                                         }
@@ -1516,15 +1569,13 @@ impl eframe::App for MyApp {
                                     None if installed_apps_error.is_some() => {
                                         if let Some(error) = &installed_apps_error {
                                             ui.label(
-                                                RichText::new(format!(
-                                                    "Failed getting installed apps: {error}"
-                                                ))
+                                                RichText::new(t!("failed_getting_apps", error = error.clone()))
                                                 .color(Color32::RED),
                                             );
                                         }
                                     }
                                     None => {
-                                        ui.label("Getting installed apps...");
+                                        ui.label(t!("getting_apps"));
                                     }
                                 }
                             });

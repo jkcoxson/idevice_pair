@@ -131,6 +131,14 @@ This project uses several key dependencies:
 
 For a complete list of dependencies, see [`Cargo.toml`](Cargo.toml).
 
+## Translation
+
+This project supports multiple languages.
+
+1. Locate the `locales/` directory.
+2. Create a new `.toml` file named with your language code.
+3. Use `en.toml` as a template and translate the strings.
+
 ## Troubleshooting
 
 ### Device Not Detected
