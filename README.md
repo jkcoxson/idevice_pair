@@ -54,7 +54,7 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
 
 The application can generate and manage pairing files for various applications:
 
-1. **Load existing pairing file**: Click `Load` to import from your computer (recommended)
+1. **Load existing pairing file**: Click `Load` to import from your computer (recommended for lockdown)
 2. **Generate new pairing file**: Click `Generate` to create a fresh pairing
 3. **Save pairing file**: Export the pairing file to your computer or your supported applications
 4. **Validate pairing**: Test the pairing file against a local network-connected device
@@ -98,11 +98,12 @@ Before creating a pairing file, ensure you have:
 1. **Connect your device** to your computer via USB cable
    - If prompted, select `Trust` and enter your passcode
 2. **Open idevice_pair** and select your device from the dropdown menu
-3. **Load pairing file**: 
+3. **Select pairing mode**, `RPPairing` for iOS 17.4+, `Lockdown` for older verions.
+5. **Obtain pairing file:**
    - Ensure your device is unlocked and on the home screen
-   - Click `Load`
+   - **RPPairing**: click `Generate`, **Lockdown**: click `Load`. 
    - If prompted on your device, tap `Trust` and enter your passcode
-4. **Install for your app**:
+6. **Install/Place in your app**:
    - Keep your device unlocked and on the home screen
    - Scroll down and click `Install` under your target application (e.g., "StikDebug")
    - You should see `Success` appear in green
@@ -113,7 +114,7 @@ The tool includes built-in support for pairing file formats used by:
 
 - **SideStore**: `ALTPairingFile.mobiledevicepairing`
 - **LiveContainer+SideStore**: `SideStore/Documents/ALTPairingFile.mobiledevicepairing`
-- **StikDebug**: `pairingFile.plist`
+- **StikDebug**: RPPairing: `rp_pairing_file.plist`, Lockdown: `pairingFile.plist`.
 - **SparseBox**: `pairingFile.plist`
 - **Feather**: `pairingFile.plist`
 - **Protokolle**: `pairingFile.plist`
