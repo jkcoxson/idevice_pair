@@ -93,10 +93,7 @@ fn supported_apps_for_mode(mode: PairingMode) -> HashMap<String, String> {
                 "LiveContainer".to_string(),
                 "SideStore/Documents/ALTPairingFile.mobiledevicepairing".to_string(),
             );
-            supported_apps.insert("Feather".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("SparseBox".to_string(), "pairingFile.plist".to_string());
-            supported_apps.insert("Protokolle".to_string(), "pairingFile.plist".to_string());
-            supported_apps.insert("Antrag".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("ByeTunes".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("StikDebug".to_string(), "pairingFile.plist".to_string());
         }
@@ -104,6 +101,9 @@ fn supported_apps_for_mode(mode: PairingMode) -> HashMap<String, String> {
             supported_apps
                 .insert("StikDebug (Sideloaded)".to_string(), RP_PAIRING_FILE_NAME.to_string());
             supported_apps.insert("StosDebug".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("Protokolle".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("Antrag".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("Feather".to_string(), "pairingFile.plist".to_string());
         }
     }
     supported_apps
