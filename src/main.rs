@@ -45,6 +45,12 @@ enum PairingMode {
 }
 
 impl PairingMode {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Lockdown => "Lockdown",
+            Self::RemotePairing => "RPPairing",
+        }
+    }
 
     fn default_file_name(self, udid: &str) -> String {
         match self {
