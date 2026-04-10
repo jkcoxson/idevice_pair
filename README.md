@@ -14,6 +14,9 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
   - [Feather](https://github.com/khcrysalis/Feather)
   - [Protokolle](https://github.com/khcrysalis/Protokolle)
   - [Antrag](https://github.com/khcrysalis/Antrag)
+
+- **Independent Marketplace Integration**:
+  - [appdb](https://appdb.to)
 - **Developer Mode**: Monitor developer mode status
 - **Developer Disk Image Mounting**: Automatically mount required developer images
 

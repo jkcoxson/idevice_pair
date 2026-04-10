@@ -29,6 +29,7 @@ use idevice::{
 use rfd::FileDialog;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
+mod appdb;
 mod discover;
 mod mount;
 
@@ -101,8 +102,10 @@ fn supported_apps_for_mode(mode: PairingMode) -> HashMap<String, String> {
             supported_apps.insert("StikDebug".to_string(), "pairingFile.plist".to_string());
         }
         PairingMode::RemotePairing => {
-            supported_apps
-                .insert("StikDebug (Sideloaded)".to_string(), RP_PAIRING_FILE_NAME.to_string());
+            supported_apps.insert(
+                "StikDebug (Sideloaded)".to_string(),
+                RP_PAIRING_FILE_NAME.to_string(),
+            );
             supported_apps.insert("StosDebug".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("Protokolle".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("Antrag".to_string(), "pairingFile.plist".to_string());
@@ -202,6 +205,13 @@ fn main() {
         gui_recv,
         idevice_sender: idevice_sender.clone(),
         show_logs: false,
+        appdb_uuid: None,
+        appdb_qr_texture: None,
+        appdb_link_token: None,
+        appdb_status_message: None,
+        appdb_session_busy: false,
+        appdb_upload_busy: false,
+        appdb_upload_result: None,
     };
 
     let mut options = eframe::NativeOptions::default();
@@ -756,6 +766,77 @@ fn main() {
                         }
                     }
                 }
+                IdeviceCommands::AppDbStartSession => {
+                    let gui = gui_sender.clone();
+                    tokio::spawn(async move {
+                        let first = match appdb::fetch_link_session(None).await {
+                            Ok(r) => r,
+                            Err(e) => {
+                                let _ = gui.send(GuiCommands::AppDbError(e));
+                                return;
+                            }
+                        };
+                        if !first.success {
+                            let msg = first
+                                .errors
+                                .into_iter()
+                                .next()
+                                .and_then(|e| e.translated)
+                                .unwrap_or_else(|| "get_link_session failed".to_string());
+                            let _ = gui.send(GuiCommands::AppDbError(msg));
+                            return;
+                        }
+                        let data = match first.data {
+                            Some(d) => d,
+                            None => {
+                                let _ = gui.send(GuiCommands::AppDbError(
+                                    "No data in response".to_string(),
+                                ));
+                                return;
+                            }
+                        };
+                        if let Some(token) = data.link_token {
+                            let _ = gui.send(GuiCommands::AppDbLinkToken(token));
+                            return;
+                        }
+                        let uuid = data.uuid.clone();
+                        let _ = gui.send(GuiCommands::AppDbSessionStarted { uuid: uuid.clone() });
+                        loop {
+                            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                            let r = match appdb::fetch_link_session(Some(&uuid)).await {
+                                Ok(x) => x,
+                                Err(e) => {
+                                    log::warn!("appdb poll network error: {e}");
+                                    continue;
+                                }
+                            };
+                            if !r.success {
+                                if r.errors.iter().any(|e| {
+                                    e.code.as_deref() == Some("ERROR_LINK_SESSION_EXPIRED")
+                                }) {
+                                    let _ = gui.send(GuiCommands::AppDbSessionExpired);
+                                    return;
+                                }
+                                log::warn!("appdb poll: {:?}", r.errors);
+                                continue;
+                            }
+                            let Some(d) = r.data else {
+                                continue;
+                            };
+                            if let Some(token) = d.link_token {
+                                let _ = gui.send(GuiCommands::AppDbLinkToken(token));
+                                return;
+                            }
+                        }
+                    });
+                }
+                IdeviceCommands::AppDbUpload((link_token, bytes)) => {
+                    let gui = gui_sender.clone();
+                    tokio::spawn(async move {
+                        let res = appdb::upload_pairing_file(&link_token, &bytes).await;
+                        let _ = gui.send(GuiCommands::AppDbUploadResult(res));
+                    });
+                }
                 IdeviceCommands::DiscoveredDevice((ip, mac)) => {
                     discovered_devices.insert(mac, ip);
                 }
@@ -833,6 +914,11 @@ enum GuiCommands {
     Validated(Result<(), IdeviceError>),
     InstalledApps(Result<HashMap<String, String>, IdeviceError>),
     InstallPairingFile((String, Result<(), IdeviceError>)), // name
+    AppDbSessionStarted { uuid: String },
+    AppDbLinkToken(String),
+    AppDbError(String),
+    AppDbSessionExpired,
+    AppDbUploadResult(Result<(), String>),
 }
 
 enum IdeviceCommands {
@@ -848,6 +934,8 @@ enum IdeviceCommands {
     InstalledApps((UsbmuxdDevice, Vec<String>)),
     InstallPairingFile((UsbmuxdDevice, String, String, String, Vec<u8>)), // dev, name, b_id, install path, bytes
     DiscoveredDevice((IpAddr, String)),                                   // ip, mac
+    AppDbStartSession,
+    AppDbUpload((String, Vec<u8>)), // link_token, pairing file bytes
 }
 
 struct MyApp {
@@ -886,6 +974,14 @@ struct MyApp {
     idevice_sender: UnboundedSender<IdeviceCommands>,
 
     show_logs: bool,
+
+    appdb_uuid: Option<String>,
+    appdb_qr_texture: Option<egui::TextureHandle>,
+    appdb_link_token: Option<String>,
+    appdb_status_message: Option<String>,
+    appdb_session_busy: bool,
+    appdb_upload_busy: bool,
+    appdb_upload_result: Option<Result<(), String>>,
 }
 
 impl MyApp {
@@ -900,6 +996,16 @@ impl MyApp {
         self.supported_apps().keys().cloned().collect()
     }
 
+    fn reset_appdb_session_state(&mut self) {
+        self.appdb_uuid = None;
+        self.appdb_qr_texture = None;
+        self.appdb_link_token = None;
+        self.appdb_status_message = None;
+        self.appdb_session_busy = false;
+        self.appdb_upload_busy = false;
+        self.appdb_upload_result = None;
+    }
+
     fn reset_pairing_state(&mut self) {
         self.pairing_file = None;
         self.pairing_file_message = None;
@@ -910,6 +1016,33 @@ impl MyApp {
         self.validating = false;
         self.validate_res = None;
         self.validation_ip_input.clear();
+        self.reset_appdb_session_state();
+    }
+
+    /// Sends pairing file to appdb when both `link_token` and pairing file are present.
+    fn request_appdb_auto_upload(&mut self) {
+        if self.appdb_upload_busy {
+            return;
+        }
+        let Some(token) = self.appdb_link_token.clone() else {
+            return;
+        };
+        let Some(pf) = self.pairing_file.as_ref() else {
+            return;
+        };
+        match pf.bytes() {
+            Ok(bytes) => {
+                self.appdb_upload_busy = true;
+                self.appdb_upload_result = None;
+                self.appdb_status_message = Some("Uploading pairing file to appdb...".to_string());
+                self.idevice_sender
+                    .send(IdeviceCommands::AppDbUpload((token, bytes)))
+                    .unwrap();
+            }
+            Err(e) => {
+                self.appdb_upload_result = Some(Err(e.to_string()));
+            }
+        }
     }
 
     fn save_pairing_file(&mut self, default_name: &str) {
@@ -1037,11 +1170,13 @@ impl eframe::App for MyApp {
                                 None
                             }
                         };
+                        self.request_appdb_auto_upload();
                     }
                     Err(e) => {
                         self.pairing_file = None;
                         self.pairing_file_string = None;
                         self.pairing_file_message = Some(e.to_string());
+                        self.reset_appdb_session_state();
                     }
                 },
                 GuiCommands::Validated(res) => match res {
@@ -1058,6 +1193,60 @@ impl eframe::App for MyApp {
                         *v = Some(res);
                     }
                     self.pairing_file_message = Some(pairing_file_message);
+                }
+                GuiCommands::AppDbSessionStarted { uuid } => {
+                    self.appdb_uuid = Some(uuid.clone());
+                    self.appdb_link_token = None;
+                    self.appdb_status_message = Some(
+                        "Scan the QR code with your iPhone, iPad or iPod (linked to appdb)."
+                            .to_string(),
+                    );
+                    let url = appdb::qr_code_url(&uuid);
+                    match appdb::qr_code_color_image(&url) {
+                        Ok(img) => {
+                            self.appdb_qr_texture = Some(ctx.load_texture(
+                                format!("appdb_qr_{uuid}"),
+                                img,
+                                Default::default(),
+                            ));
+                        }
+                        Err(e) => {
+                            self.appdb_status_message = Some(format!("QR error: {e}"));
+                        }
+                    }
+                }
+                GuiCommands::AppDbLinkToken(token) => {
+                    self.appdb_link_token = Some(token);
+                    self.appdb_session_busy = false;
+                    self.appdb_status_message = Some("Device authorized.".to_string());
+                    self.request_appdb_auto_upload();
+                }
+                GuiCommands::AppDbError(msg) => {
+                    self.appdb_session_busy = false;
+                    self.appdb_status_message = Some(msg);
+                }
+                GuiCommands::AppDbSessionExpired => {
+                    self.appdb_link_token = None;
+                    self.appdb_session_busy = false;
+                    self.appdb_uuid = None;
+                    self.appdb_qr_texture = None;
+                    self.appdb_upload_busy = false;
+                    self.appdb_upload_result = None;
+                    self.appdb_status_message =
+                        Some("Link session expired. Start a new session.".to_string());
+                }
+                GuiCommands::AppDbUploadResult(res) => {
+                    self.appdb_upload_busy = false;
+                    match &res {
+                        Ok(()) => {
+                            self.appdb_status_message =
+                                Some("Pairing file attached to appdb successfully.".to_string());
+                            self.appdb_qr_texture = None;
+                            self.appdb_uuid = None;
+                        }
+                        Err(_) => {}
+                    }
+                    self.appdb_upload_result = Some(res);
                 }
             },
             Err(e) => match e {
@@ -1251,6 +1440,7 @@ impl eframe::App for MyApp {
                                                 Some("Loading...".to_string());
                                             self.pairing_file_string = None;
                                             self.save_error = None;
+                                            self.reset_appdb_session_state();
                                             self.idevice_sender
                                                 .send(IdeviceCommands::LoadPairingFile(
                                                     dev.clone(),
@@ -1260,6 +1450,7 @@ impl eframe::App for MyApp {
                                     }
                                     #[cfg(feature = "generate")]
                                     {
+                                        self.reset_appdb_session_state();
                                         self.pairing_file_message = Some("Loading...".to_string());
                                         self.pairing_file_string = None;
                                         self.idevice_sender
@@ -1289,6 +1480,7 @@ impl eframe::App for MyApp {
                                 }
                                 if ui.button("Generate").clicked() {
                                     self.pairing_file = None;
+                                    self.reset_appdb_session_state();
                                     self.pairing_file_message = Some("Loading...".to_string());
                                     self.pairing_file_string = None;
                                     self.save_error = None;
@@ -1304,6 +1496,42 @@ impl eframe::App for MyApp {
                     });
                     if let Some(msg) = &self.pairing_file_message {
                         ui.label(msg);
+                    }
+
+                    ui.separator();
+                    if self.pairing_file.is_some() {
+                        ui.heading("appdb");
+                        ui.label("Attach to appdb: scan the QR code from your device. The pairing file is uploaded automatically when the session is authorized.");
+                        ui.horizontal(|ui| {
+                            if ui
+                                .add_enabled_ui(!self.appdb_session_busy, |ui| {
+                                    ui.button("Attach").clicked()
+                                })
+                                .inner
+                            {
+                                self.reset_appdb_session_state();
+                                self.appdb_status_message = Some("Starting...".to_string());
+                                self.appdb_session_busy = true;
+                                self.idevice_sender
+                                    .send(IdeviceCommands::AppDbStartSession)
+                                    .unwrap();
+                            }
+                        });
+                        if let Some(msg) = &self.appdb_status_message {
+                            ui.label(msg);
+                        }
+                        if let Some(tex) = &self.appdb_qr_texture {
+                            ui.image((tex.id(), tex.size_vec2()));
+                        }
+                        if let Some(u) = &self.appdb_uuid {
+                            ui.label(RichText::new(format!("Session: {u}")).small().weak());
+                        }
+                        if self.appdb_upload_busy {
+                            ui.label("Uploading...");
+                        }
+                        if let Some(Err(e)) = &self.appdb_upload_result {
+                            ui.label(RichText::new(e).color(Color32::RED));
+                        }
                     }
 
                     ui.separator();
