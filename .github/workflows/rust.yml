@@ -41,7 +41,7 @@ jobs:
             toolfile: appimagetool-aarch64.AppImage
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Build setup
       - name: Setup Rust toolchain
@@ -63,7 +63,7 @@ jobs:
             usbmuxd
 
       - name: Cache Cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -108,7 +108,7 @@ jobs:
           ./appimagetool.AppImage AppDir "$FILENAME"
 
       - name: Upload AppImage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.APP_NAME }}-${{ env.VERSION }}-linux-${{ matrix.arch }}.AppImage
           path: ${{ env.APP_NAME }}-${{ env.VERSION }}-linux-${{ matrix.arch }}.AppImage
@@ -126,7 +126,7 @@ jobs:
             target: aarch64-apple-darwin
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Rust for ${{ matrix.arch }}
         uses: dtolnay/rust-toolchain@stable
@@ -135,7 +135,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Cache Cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -152,7 +152,7 @@ jobs:
             --target ${{ matrix.target }}
 
       - name: Upload slice ${{ matrix.arch }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: slice-${{ matrix.arch }}
           path: target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}
@@ -166,23 +166,23 @@ jobs:
       HAVE_NOTARIZE_SECRETS: ${{ secrets.NOTARIZE_APPLE_ID != '' && secrets.NOTARIZE_APP_SPECIFIC_PASS != '' && secrets.NOTARIZE_TEAM_ID != '' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download x86_64 slice
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: slice-x86_64
           path: slice-x86_64
 
       - name: Download arm64 slice
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: slice-arm64
           path: slice-arm64
 
       - name: Import Developer ID Certificate
         if: env.HAVE_SIGNING_SECRETS == 'true'
-        uses: apple-actions/import-codesign-certs@v5
+        uses: apple-actions/import-codesign-certs@v6
         with:
           p12-file-base64: ${{ secrets.DEV_ID_P12_BASE64 }}
           p12-password: ${{ secrets.DEV_ID_P12_PASSWORD }}
@@ -262,7 +262,7 @@ jobs:
           xcrun stapler staple "$DMG"
 
       - name: Upload DMG
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.APP_NAME }}-${{ env.VERSION }}-macos-universal.dmg
           path: dist/${{ env.APP_NAME }}-${{ env.VERSION }}-macos-universal.dmg
@@ -272,14 +272,14 @@ jobs:
     name: Build Windows x64
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
           targets: x86_64-pc-windows-msvc
       - name: Cache Cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -295,7 +295,7 @@ jobs:
           cp target/x86_64-pc-windows-msvc/release/${{ env.BINARY_NAME }}.exe \
              release/${{ env.APP_NAME }}-${{ env.VERSION }}-windows-x86_64.exe
       - name: Upload Windows .exe
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.APP_NAME }}-${{ env.VERSION }}-windows-x86_64.exe
           path: release/${{ env.APP_NAME }}-${{ env.VERSION }}-windows-x86_64.exe
