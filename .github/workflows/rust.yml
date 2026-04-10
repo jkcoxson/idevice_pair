@@ -156,7 +156,6 @@ jobs:
         with:
           name: slice-${{ matrix.arch }}
           path: target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}
-          retention-days: 1
 
   macos-bundle:
     name: Create, Sign, Notarize & Upload Universal DMG
