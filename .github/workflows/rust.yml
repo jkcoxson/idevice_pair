@@ -267,11 +267,6 @@ jobs:
           name: ${{ env.APP_NAME }}-${{ env.VERSION }}-macos-universal.dmg
           path: dist/${{ env.APP_NAME }}-${{ env.VERSION }}-macos-universal.dmg
 
-      - name: Cleanup slices
-        if: success()
-        run: |
-          rm -rf slice-x86_64 slice-arm64
-
   # Windows build
   build-windows:
     name: Build Windows x64
