@@ -95,21 +95,29 @@ fn supported_apps_for_mode(mode: PairingMode) -> HashMap<String, String> {
                 "SideStore".to_string(),
                 "ALTPairingFile.mobiledevicepairing".to_string(),
             );
-            supported_apps.insert(
-                "LiveContainer".to_string(),
-                "SideStore/Documents/ALTPairingFile.mobiledevicepairing".to_string(),
-            );
+            supported_apps.insert("LiveContainer".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("SparseBox".to_string(), "pairingFile.plist".to_string());
-            supported_apps.insert("ByeTunes".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("ByeTunes".to_string(), "pairing file/pairingFile.plist".to_string());
             supported_apps.insert("StikDebug".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("EnsWilde".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("StikDebug (Sideloaded)".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("Protokolle".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("Antrag".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("Feather".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("StikStore".to_string(), "pairingFile.plist".to_string());
         }
         PairingMode::RemotePairing => {
-            supported_apps
-                .insert("StikDebug (Sideloaded)".to_string(), RP_PAIRING_FILE_NAME.to_string());
+            supported_apps.insert(
+                "SideStore".to_string(),
+                "ALTPairingFile.mobiledevicepairing".to_string(),
+            );
+            supported_apps.insert("LiveContainer".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("StikDebug (Sideloaded)".to_string(), RP_PAIRING_FILE_NAME.to_string());
             supported_apps.insert("StosDebug".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("Protokolle".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("Antrag".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("Feather".to_string(), "pairingFile.plist".to_string());
+            supported_apps.insert("Reynard".to_string(), "pairingFile.plist".to_string());
         }
     }
     supported_apps
