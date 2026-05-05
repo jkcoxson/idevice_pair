@@ -90,13 +90,13 @@ jobs:
       - name: Build AppImage
         run: |
           mkdir -p dist
-          FILENAME="dist/${{ env.APP_NAME }}-linux-${{ matrix.arch }}.AppImage"
+          FILENAME="dist/${{ env.APP_NAME }}--linux-${{ matrix.arch }}.AppImage"
           ./appimagetool.AppImage AppDir "$FILENAME"
 
       - name: Upload Linux bundle
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.APP_NAME }}-linux-${{ matrix.arch }}
+          name: ${{ env.APP_NAME }}--linux-${{ matrix.arch }}
           path: dist/*
 
   build-windows:
@@ -137,12 +137,12 @@ jobs:
           cargo build --release --no-default-features --bin ${{ env.BINARY_NAME }} --target ${{ matrix.target }}
           mkdir -p dist
           cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}.exe \
-            dist/${{ env.APP_NAME }}-windows-${{ matrix.arch }}.exe
+            dist/${{ env.APP_NAME }}--windows-${{ matrix.arch }}.exe
 
       - name: Upload Windows bundle
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.APP_NAME }}-windows-${{ matrix.arch }}
+          name: ${{ env.APP_NAME }}--windows-${{ matrix.arch }}
           path: dist/*.exe
 
   build-macos-slices:
@@ -316,7 +316,7 @@ jobs:
 
       - name: Create DMG
         run: |
-          DMG="dist/${{ env.APP_NAME }}-macos-universal.dmg"
+          DMG="dist/${{ env.APP_NAME }}--macos-universal.dmg"
           mkdir -p dist dmg-staging
           trap 'rm -rf dmg-staging' EXIT
           mv "${{ env.APP_NAME }}.app" dmg-staging/
@@ -346,5 +346,5 @@ jobs:
       - name: Upload Universal DMG
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.APP_NAME }}-macos-universal
-          path: dist/${{ env.APP_NAME }}-macos-universal.dmg
+          name: ${{ env.APP_NAME }}--macos-universal
+          path: dist/${{ env.APP_NAME }}--macos-universal.dmg
