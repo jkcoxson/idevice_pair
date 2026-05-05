@@ -167,19 +167,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-            - name: Clean up disk space
-                    run: |
-                              sudo rm -rf /Applications/Xcode.app/Contents/Developer/Platforms/WatchOS.platform
-                                        sudo rm -rf /Applications/Xcode.app/Contents/Developer/Platforms/AppleTVOS.platform
-                                                  sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes/watchOS.simruntime
-                                                            sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes/tvOS.simruntime
 
       - name: Free disk space
         run: |
           df -h
-          # Remove iOS/WatchOS/AppleTVOS simulators to free up space
           sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes/*
-          # Remove some large Xcode platforms we don't need
           sudo rm -rf /Applications/Xcode.app/Contents/Developer/Platforms/WatchOS.platform
           sudo rm -rf /Applications/Xcode.app/Contents/Developer/Platforms/AppleTVOS.platform
           df -h
