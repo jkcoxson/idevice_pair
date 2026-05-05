@@ -37,6 +37,7 @@ uuid = { version = "1.16", features = ["v4"] }
 mdns = { version = "3" }
 futures-util = { version = "0.3" }
 rust-i18n = "3"
+zbus = "5.12.1"
 
 [build-dependencies]
 reqwest = { version = "0.12", features = ["blocking"] }
