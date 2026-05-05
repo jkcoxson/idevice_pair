@@ -109,9 +109,9 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - target: x86_64-pc-windows-gnu
+          - target: x86_64-pc-windows-msvc
             arch: x86_64
-            runner: ubuntu-24.04
+            runner: windows-latest
 
     steps:
       - uses: actions/checkout@v6
@@ -119,11 +119,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-
-      - name: Install mingw-w64
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mingw-w64 nasm
 
       - name: Cache Cargo
         uses: actions/cache@v5
@@ -136,6 +131,7 @@ jobs:
           restore-keys: windows-cargo-
 
       - name: Build binary
+        shell: bash
         run: |
           cargo build --release --no-default-features --bin ${{ env.BINARY_NAME }} --target ${{ matrix.target }}
           mkdir -p dist
