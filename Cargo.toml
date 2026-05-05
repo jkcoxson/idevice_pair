@@ -32,6 +32,7 @@ naga = { version = "27", features = ["termcolor"] }
 rfd = { version = "0.15", features = ["gtk3"], default-features = false }
 tokio = { version = "1.45", features = ["full"] }
 plist = { version = "1.7" }
+zbus = "5.12.1"
 log = { version = "0.4" }
 uuid = { version = "1.16", features = ["v4"] }
 mdns = { version = "3" }
