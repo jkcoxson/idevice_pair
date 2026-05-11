@@ -105,8 +105,10 @@ fn supported_apps_for_mode(mode: PairingMode) -> HashMap<String, String> {
             supported_apps.insert("Ksign".to_string(), "pairingFile.plist".to_string());
         }
         PairingMode::RemotePairing => {
-            supported_apps
-                .insert("StikDebug (Sideloaded)".to_string(), RP_PAIRING_FILE_NAME.to_string());
+            supported_apps.insert(
+                "StikDebug (Sideloaded)".to_string(),
+                RP_PAIRING_FILE_NAME.to_string(),
+            );
             supported_apps.insert("StosDebug".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("Protokolle".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("Antrag".to_string(), "pairingFile.plist".to_string());
@@ -233,7 +235,9 @@ fn setup_custom_fonts(ctx: &egui::Context) {
             .insert(0, "cjk_font".to_owned());
         ctx.set_fonts(fonts);
     } else {
-        eprintln!("Warning: No CJK font found on this system. Chinese characters might not display correctly.");
+        eprintln!(
+            "Warning: No CJK font found on this system. Chinese characters might not display correctly."
+        );
     }
 }
 
@@ -1062,10 +1066,8 @@ impl eframe::App for MyApp {
                         t!("linux_usbmuxd_help")
                     };
 
-                    self.devices_placeholder = format!(
-                        "{} {install_msg}\n\n{idevice_error:#?}",
-                        t!("no_usbmuxd")
-                    );
+                    self.devices_placeholder =
+                        format!("{} {install_msg}\n\n{idevice_error:#?}", t!("no_usbmuxd"));
                 }
                 GuiCommands::Devices(vec) => {
                     self.devices = Some(vec);
@@ -1085,7 +1087,8 @@ impl eframe::App for MyApp {
                 }
                 GuiCommands::DeviceInfo(info) => self.device_info = Some(info),
                 GuiCommands::GetDevicesFailure(idevice_error) => {
-                    self.devices_placeholder = t!("get_devices_failure", error = format!("{idevice_error:?}")).to_string();
+                    self.devices_placeholder =
+                        t!("get_devices_failure", error = format!("{idevice_error:?}")).to_string();
                 }
                 GuiCommands::EnabledWireless => self.wireless_enabled = Some(Ok(())),
                 GuiCommands::EnableWirelessFailure(idevice_error) => {
@@ -1126,7 +1129,8 @@ impl eframe::App for MyApp {
                 GuiCommands::InstallPairingFile((name, res)) => {
                     let pairing_file_message = match &res {
                         Ok(()) => t!("install_success", name = name.clone()).to_string(),
-                        Err(e) => t!("install_failed", name = name.clone(), error = e.to_string()).to_string(),
+                        Err(e) => t!("install_failed", name = name.clone(), error = e.to_string())
+                            .to_string(),
                     };
                     if let Some(v) = self.install_res.get_mut(&name) {
                         *v = Some(res);
@@ -1139,8 +1143,7 @@ impl eframe::App for MyApp {
                 tokio::sync::mpsc::error::TryRecvError::Disconnected => {
                     self.devices_placeholder = t!("backend_disconnected").to_string();
                     if self.pairing_file_message.is_none() {
-                        self.pairing_file_message =
-                            Some(t!("backend_disconnected").to_string());
+                        self.pairing_file_message = Some(t!("backend_disconnected").to_string());
                     }
                 }
             },
