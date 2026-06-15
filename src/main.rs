@@ -45,13 +45,6 @@ enum PairingMode {
 }
 
 impl PairingMode {
-    fn label(self) -> &'static str {
-        match self {
-            Self::Lockdown => "Lockdown",
-            Self::RemotePairing => "RPPairing",
-        }
-    }
-
     fn default_file_name(self, udid: &str) -> String {
         match self {
             Self::Lockdown => format!("{udid}.plist"),
@@ -175,9 +168,9 @@ async fn generate_remote_pairing_file(
     send_pairing_status(gui_sender, t!("starting_rp"));
     send_pairing_status(gui_sender, t!("trust_device"));
     let mut pairing_file = RpPairingFile::generate(hostname);
-    let mut pairing_client = RemotePairingClient::new(remote_xpc, hostname, &mut pairing_file);
+    let mut pairing_client = RemotePairingClient::new(remote_xpc, hostname);
     pairing_client
-        .connect(async |_| "000000".to_string(), ())
+        .connect(&mut pairing_file, || async { "000000".to_string() })
         .await?;
 
     // use it to try and force keychain commitment
@@ -188,9 +181,10 @@ async fn generate_remote_pairing_file(
     let _ = remote_xpc.recv_root().await;
 
     send_pairing_status(gui_sender, t!("starting_rp"));
-    let mut pairing_client = RemotePairingClient::new(remote_xpc, hostname, &mut pairing_file);
+    let mut pairing_file = RpPairingFile::generate(hostname);
+    let mut pairing_client = RemotePairingClient::new(remote_xpc, hostname);
     pairing_client
-        .connect(async |_| "000000".to_string(), ())
+        .connect(&mut pairing_file, || async { "000000".to_string() })
         .await?;
 
     Ok(pairing_file)
@@ -710,9 +704,9 @@ fn main() {
                         let _ = conn.recv_root().await;
 
                         let hostname = pairing_hostname();
-                        let mut rpc = RemotePairingClient::new(conn, &hostname, &mut pairing_file);
+                        let mut rpc = RemotePairingClient::new(conn, &hostname);
                         let _ = rpc.attempt_pair_verify().await?;
-                        rpc.validate_pairing().await
+                        rpc.validate_pairing(&mut pairing_file).await
                     })
                     .catch_unwind()
                     .await;
