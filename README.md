@@ -15,6 +15,10 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
   - [Protokolle](https://github.com/khcrysalis/Protokolle)
   - [Antrag](https://github.com/khcrysalis/Antrag)
   - [KSign](https://github.com/Nyasami/Ksign)
+  - [EnsWilde](https://github.com/YangJiiii/EnsWilde)
+  - [Reynard Browser](https://github.com/minh-ton/reynard-browser)
+  - [Auto Capture](https://apps.apple.com/us/app/dev-auto-capture/id6755616902)
+  - [StosDebug](https://github.com/stossy11/StosDebug)
 - **Developer Mode**: Monitor developer mode status
 - **Developer Disk Image Mounting**: Automatically mount required developer images
 
