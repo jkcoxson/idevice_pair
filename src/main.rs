@@ -174,14 +174,13 @@ async fn generate_remote_pairing_file(
         .await?;
 
     // use it to try and force keychain commitment
-    // iOS has trouble commiting I guess
+    // iOS has trouble committing I guess
     let tunnel_service_stream = adapter.connect(tunnel_service.port).await?;
     let mut remote_xpc = RemoteXpcClient::new(tunnel_service_stream).await?;
     remote_xpc.do_handshake().await?;
     let _ = remote_xpc.recv_root().await;
 
     send_pairing_status(gui_sender, t!("starting_rp"));
-    let mut pairing_file = RpPairingFile::generate(hostname);
     let mut pairing_client = RemotePairingClient::new(remote_xpc, hostname);
     pairing_client
         .connect(&mut pairing_file, || async { "000000".to_string() })
