@@ -124,7 +124,6 @@ fn supported_apps_for_mode(mode: PairingMode) -> HashMap<String, String> {
             supported_apps.insert("Protokolle".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("Antrag".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("Feather".to_string(), "pairingFile.plist".to_string());
-            supported_apps.insert("StosDebug".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("Reynard".to_string(), "pairingFile.plist".to_string());
             supported_apps.insert("Ksign".to_string(), "pairingFile.plist".to_string());
         }
