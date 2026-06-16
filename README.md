@@ -15,6 +15,7 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
   - [Protokolle](https://github.com/khcrysalis/Protokolle)
   - [Antrag](https://github.com/khcrysalis/Antrag)
   - [KSign](https://github.com/Nyasami/Ksign)
+  - [ByeTunes](https://github.com/EduAlexxis/ByeTunes)
 - **Developer Mode**: Monitor developer mode status
 - **Developer Disk Image Mounting**: Automatically mount required developer images
 
