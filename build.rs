@@ -25,22 +25,27 @@ fn main() {
     }
 
     println!("cargo:rerun-if-changed=build.rs");
+    for file in OUTPUT_FILES {
+        println!("cargo:rerun-if-changed={file}");
+    }
 
     // Ensure output directory exists
     if !Path::new(OUTPUT_DIR).exists() {
         fs::create_dir_all(OUTPUT_DIR).expect("Failed to create DDI directory");
     }
 
-    // Check if the file already exists
-    if Path::new(OUTPUT_FILES[0]).exists() {
-        return;
-    }
+    for (url, output_file) in URLS.iter().zip(OUTPUT_FILES.iter()) {
+        if file_exists_with_content(output_file) {
+            continue;
+        }
 
-    // Download the file using reqwest
-    println!("Downloading BuildManifest.plist...");
-    for (i, url) in URLS.iter().enumerate() {
+        println!("Downloading {output_file}...");
         let response = get(*url).expect("Failed to send request");
         let bytes = response.bytes().expect("Failed to read response");
-        fs::write(OUTPUT_FILES[i], &bytes).expect("Failed to write file");
+        fs::write(output_file, &bytes).expect("Failed to write file");
     }
+}
+
+fn file_exists_with_content(path: &str) -> bool {
+    fs::metadata(path).map(|metadata| metadata.len() > 0).unwrap_or(false)
 }
