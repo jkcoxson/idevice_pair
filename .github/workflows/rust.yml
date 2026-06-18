@@ -1,12 +1,26 @@
-name: Build & Bundle
+name: Build
 
 on:
+  push:
+    branches:
+      - master
+    tags:
+      - "[0-9]*"
+
+  pull_request:
+
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: Create a GitHub release
+        type: boolean
+        default: false
 
 env:
   BINARY_NAME: idevice_pair
   APP_NAME: idevice_pair
   ICON_PNG: icon.png
+  ICON_ICNS_NAME: icon
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -142,32 +156,24 @@ jobs:
           path: dist/*.exe
 
   build-macos-slices:
-    name: Build macOS ${{ matrix.arch }} slice
-    runs-on: ubuntu-24.04
+    name: Build macOS slices
+    runs-on: macos-latest
     strategy:
-      fail-fast: true
       matrix:
         include:
-          - target: aarch64-apple-darwin
-            arch: arm
-            suffix: arm64
-            osxcross_prefix: arm64-apple-darwin21.4
-          - target: x86_64-apple-darwin
-            arch: intel
-            suffix: x86_64
-            osxcross_prefix: x86_64-apple-darwin21.4
+          - arch: x86_64
+            target: x86_64-apple-darwin
+          - arch: arm64
+            target: aarch64-apple-darwin
 
     steps:
       - uses: actions/checkout@v6
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust for ${{ matrix.arch }}
+        uses: dtolnay/rust-toolchain@stable
         with:
+          components: rustfmt, clippy
           targets: ${{ matrix.target }}
-
-      - name: Setup osxcross
-        uses: Timmmm/setup-osxcross@v3
-        with:
-          osx-version: "12.3"
 
       - name: Cache Cargo
         uses: actions/cache@v5
@@ -176,52 +182,21 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: macos-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{matrix.target}}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: macos-cargo-
 
-      - name: Build binary
+      - name: Build ${{ matrix.arch }} slice
         run: |
-          target_env=$(echo "${{ matrix.target }}" | tr '-' '_')
-          target_env_upper=$(echo "${target_env}" | tr '[:lower:]' '[:upper:]')
-          prefix="${{ matrix.osxcross_prefix }}"
-          osxcross_bin="$(dirname "$(command -v "${prefix}-clang")")"
-          osxcross_root="$(cd "${osxcross_bin}/.." && pwd)"
-          sdk_dir="${osxcross_root}/SDK"
-          if [ -d "${sdk_dir}" ]; then
-            sdkroot="$(ls -d "${sdk_dir}"/MacOSX*.sdk 2>/dev/null | sort -V | tail -n1)"
-            if [ -n "${sdkroot}" ]; then
-              export SDKROOT="${sdkroot}"
-            fi
-          fi
-          export MACOSX_DEPLOYMENT_TARGET="11.0"
-          ld_path=""
-          for name in "${prefix}-ld" "${prefix}-ld64" "ld64" "ld"; do
-            if [ -x "${osxcross_bin}/${name}" ]; then
-              ld_path="${osxcross_bin}/${name}"
-              break
-            fi
-          done
-          export "CC_${target_env}=${osxcross_bin}/${prefix}-clang"
-          export "CXX_${target_env}=${osxcross_bin}/${prefix}-clang++"
-          export "AR_${target_env}=${osxcross_bin}/${prefix}-ar"
-          export "RANLIB_${target_env}=${osxcross_bin}/${prefix}-ranlib"
-          export "CARGO_TARGET_${target_env_upper}_LINKER=${osxcross_bin}/${prefix}-clang"
-          if [ -n "${ld_path}" ]; then
-            export "CFLAGS_${target_env}=-fuse-ld=${ld_path}"
-            export "CXXFLAGS_${target_env}=-fuse-ld=${ld_path}"
-            export "LDFLAGS_${target_env}=-fuse-ld=${ld_path}"
-            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=-fuse-ld=${ld_path}"
-          fi
-          cargo build --release --no-default-features --bin ${{ env.BINARY_NAME }} --target ${{ matrix.target }}
-          mkdir -p dist
-          cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} \
-            dist/${{ env.BINARY_NAME }}-macos-${{ matrix.suffix }}
+          cargo build --release \
+            --no-default-features \
+            --bin ${{ env.BINARY_NAME }} \
+            --target ${{ matrix.target }}
 
-      - name: Upload macOS slice
+      - name: Upload slice ${{ matrix.arch }}
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.BINARY_NAME }}-macos-slice-${{ matrix.arch }}
-          path: dist/*
+          name: slice-${{ matrix.arch }}
+          path: target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}
 
   build-macos-universal:
     name: Create Universal macOS DMG
@@ -244,17 +219,17 @@ jobs:
           sudo rm -rf /usr/local/lib/node_modules
           df -h
 
-      - name: Download ARM slice
+      - name: Download x86_64 slice
         uses: actions/download-artifact@v8
         with:
-          name: ${{ env.BINARY_NAME }}-macos-slice-arm
-          path: dist/slices
+          name: slice-x86_64
+          path: slice-x86_64
 
-      - name: Download Intel slice
+      - name: Download arm64 slice
         uses: actions/download-artifact@v8
         with:
-          name: ${{ env.BINARY_NAME }}-macos-slice-intel
-          path: dist/slices
+          name: slice-arm64
+          path: slice-arm64
 
       - name: Import Developer ID Certificate
         if: env.HAVE_SIGNING_SECRETS == 'true'
@@ -269,11 +244,12 @@ jobs:
           VERSION="$(awk -F '"' '/^version = / { print $2; exit }' Cargo.toml)"
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-          lipo \
-            dist/slices/${{ env.BINARY_NAME }}-macos-x86_64 \
-            dist/slices/${{ env.BINARY_NAME }}-macos-arm64 \
+          lipo slice-x86_64/${{ env.BINARY_NAME }} \
+               slice-arm64/${{ env.BINARY_NAME }} \
             -create -output "$APP/Contents/MacOS/${{ env.APP_NAME }}"
-          rm -rf dist/slices
+
+          rm -rf slice-x86_64
+          rm -rf slice-arm64
 
           cat > "$APP/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
@@ -287,12 +263,12 @@ jobs:
             <key>CFBundleShortVersionString</key><string>${VERSION}</string>
             <key>CFBundleExecutable</key><string>${{ env.APP_NAME }}</string>
             <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleIconFile</key><string>icon.icns</string>
-            <key>CFBundleIconName</key><string>icon</string>
+            <key>CFBundleIconFile</key><string>${{ env.ICON_ICNS_NAME }}.icns</string>
+            <key>CFBundleIconName</key><string>${{ env.ICON_ICNS_NAME }}</string>
           </dict></plist>
           EOF
 
-          cp icon.icns "$APP/Contents/Resources/"
+          cp ${{ env.ICON_ICNS_NAME }}.icns "$APP/Contents/Resources/"
           cp Assets.car "$APP/Contents/Resources/"
           xattr -rc "$APP"
 
@@ -344,3 +320,65 @@ jobs:
         with:
           name: ${{ env.APP_NAME }}--macos-universal
           path: dist/${{ env.APP_NAME }}--macos-universal.dmg
+
+  release:
+    name: Draft GitHub Release
+    runs-on: ubuntu-24.04
+    needs:
+      - build-linux
+      - build-windows
+      - build-macos-universal
+    if: |
+      startsWith(github.ref, 'refs/tags/') ||
+      inputs.create_release == true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download Linux x86_64 artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.APP_NAME }}--linux-x86_64
+          path: release-assets
+
+      - name: Download Linux aarch64 artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.APP_NAME }}--linux-aarch64
+          path: release-assets
+
+      - name: Download Windows x86_64 artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.APP_NAME }}--windows-x86_64
+          path: release-assets
+
+      - name: Download macOS universal artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.APP_NAME }}--macos-universal
+          path: release-assets
+
+      - name: Extract version
+        id: get_version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(awk -F '"' '/^version = / { print $2; exit }' Cargo.toml)"
+            VERSION="${VERSION#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.get_version.outputs.version }}
+          tag_name: ${{ steps.get_version.outputs.version }}
+          files: release-assets/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
