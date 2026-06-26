@@ -31,6 +31,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 mod discover;
 mod mount;
+mod pair_host;
 
 rust_i18n::i18n!("locales", fallback = "en");
 use rust_i18n::t;
@@ -42,13 +43,14 @@ const STIKDEBUG_APPSTORE_BUNDLE_ID: &str = "com.stik.sj";
 enum PairingMode {
     Lockdown,
     RemotePairing,
+    WirelessPairing,
 }
 
 impl PairingMode {
     fn default_file_name(self, udid: &str) -> String {
         match self {
             Self::Lockdown => format!("{udid}.plist"),
-            Self::RemotePairing => RP_PAIRING_FILE_NAME.to_string(),
+            Self::RemotePairing | Self::WirelessPairing => RP_PAIRING_FILE_NAME.to_string(),
         }
     }
 }
@@ -103,7 +105,7 @@ fn supported_apps_for_mode(mode: PairingMode) -> HashMap<String, String> {
             supported_apps.insert("Ksign".to_string(), "pairingFile.plist".to_string());
 
         }
-        PairingMode::RemotePairing => {
+        PairingMode::RemotePairing | PairingMode::WirelessPairing => {
             supported_apps.insert(
                 "SideStore".to_string(),
                 "ALTPairingFile.mobiledevicepairing".to_string(),
@@ -280,6 +282,7 @@ fn main() {
         validate_res: None,
         validating: false,
         validation_ip_input: "".to_string(),
+        wireless: WirelessPairingState::default(),
         gui_recv,
         idevice_sender: idevice_sender.clone(),
         show_logs: false,
@@ -365,6 +368,7 @@ fn main() {
     rt.spawn(async move {
         let gui_sender = gui_sender.clone();
         let mut discovered_devices: HashMap<String, IpAddr> = HashMap::new(); // mac, IP
+        let mut wireless_cancel: Option<tokio::sync::oneshot::Sender<()>> = None;
         'main: while let Some(command) = idevice_receiver.recv().await {
             match command {
                 IdeviceCommands::GetDevices => {
@@ -656,6 +660,7 @@ fn main() {
                                 }
                             }
                         }
+                        PairingMode::WirelessPairing => {}
                     }
                 }
                 IdeviceCommands::Validate((ip, pairing_file)) => {
@@ -847,6 +852,19 @@ fn main() {
                 IdeviceCommands::DiscoveredDevice((ip, mac)) => {
                     discovered_devices.insert(mac, ip);
                 }
+                IdeviceCommands::StartWirelessPairing((name, model)) => {
+                    let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+                    let _ = wireless_cancel.replace(cancel_tx);
+                    tokio::spawn(pair_host::run_pairable_host(
+                        name,
+                        model,
+                        cancel_rx,
+                        gui_sender.clone(),
+                    ));
+                }
+                IdeviceCommands::StopWirelessPairing => {
+                    let _ = wireless_cancel.take();
+                }
                 IdeviceCommands::GetDeviceInfo(dev) => {
                     let p = dev.to_provider(UsbmuxdAddr::default(), "idevice_pair");
                     let mut lc = match LockdownClient::connect(&p).await {
@@ -924,6 +942,10 @@ enum GuiCommands {
     Validated(Result<(), IdeviceError>),
     InstalledApps(Result<HashMap<String, String>, IdeviceError>),
     InstallPairingFile((String, Result<(), IdeviceError>)), // name
+    WirelessPairingStatus(String),
+    WirelessPairingPin(String),
+    WirelessPairingResult(Result<PairingPayload, IdeviceError>),
+    WirelessPairingStopped,
 }
 
 enum IdeviceCommands {
@@ -939,6 +961,32 @@ enum IdeviceCommands {
     InstalledApps((UsbmuxdDevice, Vec<String>)),
     InstallPairingFile((UsbmuxdDevice, String, String, String, Vec<u8>)), // dev, name, b_id, install path, bytes
     DiscoveredDevice((IpAddr, String)),                                   // ip, mac
+    StartWirelessPairing((String, String)),
+    StopWirelessPairing,
+}
+
+struct WirelessPairingState {
+    running: bool,
+    name: String,
+    model: String,
+    status: Option<String>,
+    pin: Option<String>,
+    pairing_file: Option<PairingPayload>,
+    pairing_file_string: Option<String>,
+}
+
+impl Default for WirelessPairingState {
+    fn default() -> Self {
+        Self {
+            running: false,
+            name: "idevice_pair".to_string(),
+            model: "Mac17,7".to_string(),
+            status: None,
+            pin: None,
+            pairing_file: None,
+            pairing_file_string: None,
+        }
+    }
 }
 
 struct MyApp {
@@ -972,6 +1020,8 @@ struct MyApp {
     validating: bool,
     validation_ip_input: String,
 
+    wireless: WirelessPairingState,
+
     // Channel
     gui_recv: UnboundedReceiver<GuiCommands>,
     idevice_sender: UnboundedSender<IdeviceCommands>,
@@ -983,7 +1033,9 @@ impl MyApp {
     fn supported_apps(&self) -> &HashMap<String, String> {
         match self.pairing_mode {
             PairingMode::Lockdown => &self.lockdown_supported_apps,
-            PairingMode::RemotePairing => &self.remote_supported_apps,
+            PairingMode::RemotePairing | PairingMode::WirelessPairing => {
+                &self.remote_supported_apps
+            }
         }
     }
 
@@ -1022,6 +1074,102 @@ impl MyApp {
                 },
                 None => self.save_error = Some("No pairing file loaded".to_string()),
             }
+        }
+    }
+
+    fn save_wireless_pairing_file(&mut self) {
+        if let Some(payload) = self.wireless.pairing_file.clone()
+            && let Some(path) = FileDialog::new()
+                .set_can_create_directories(true)
+                .set_title(t!("save_to_file"))
+                .set_file_name(RP_PAIRING_FILE_NAME)
+                .save_file()
+        {
+            match payload.bytes() {
+                Ok(bytes) => {
+                    if let Err(e) = std::fs::write(path, bytes) {
+                        self.wireless.status = Some(e.to_string());
+                    }
+                }
+                Err(e) => self.wireless.status = Some(e.to_string()),
+            }
+        }
+    }
+
+    fn wireless_pairing_ui(&mut self, ui: &mut egui::Ui) {
+        ui.separator();
+        ui.heading(t!("wireless_pairing_title"));
+        ui.label(t!("wireless_pairing_help"));
+
+        if self.wireless.running {
+            if ui.button(t!("wireless_pair_stop")).clicked() {
+                self.idevice_sender
+                    .send(IdeviceCommands::StopWirelessPairing)
+                    .unwrap();
+            }
+        } else {
+            ui.horizontal(|ui| {
+                ui.label(t!("wireless_pair_name"));
+                ui.add(egui::TextEdit::singleline(&mut self.wireless.name));
+            });
+            ui.horizontal(|ui| {
+                ui.label(t!("wireless_pair_model"));
+                ui.add(egui::TextEdit::singleline(&mut self.wireless.model));
+            });
+            if ui.button(t!("wireless_pair_start")).clicked() {
+                let name = if self.wireless.name.trim().is_empty() {
+                    "idevice_pair".to_string()
+                } else {
+                    self.wireless.name.trim().to_string()
+                };
+                let model = if self.wireless.model.trim().is_empty() {
+                    "Mac17,7".to_string()
+                } else {
+                    self.wireless.model.trim().to_string()
+                };
+                self.wireless.running = true;
+                self.wireless.pin = None;
+                self.wireless.pairing_file = None;
+                self.wireless.pairing_file_string = None;
+                self.wireless.status = Some(t!("loading").to_string());
+                self.idevice_sender
+                    .send(IdeviceCommands::StartWirelessPairing((name, model)))
+                    .unwrap();
+            }
+        }
+
+        if let Some(pin) = self.wireless.pin.clone() {
+            ui.add_space(4.0);
+            ui.label(t!("wireless_pair_enter_pin"));
+            ui.label(
+                RichText::new(pin)
+                    .size(28.0)
+                    .strong()
+                    .monospace()
+                    .color(Color32::GREEN),
+            );
+        }
+
+        if let Some(status) = self.wireless.status.clone() {
+            ui.label(status);
+        }
+
+        if let Some(file_string) = self.wireless.pairing_file_string.clone() {
+            ui.separator();
+            if ui.button(t!("save_to_file")).clicked() {
+                self.save_wireless_pairing_file();
+            }
+            let background = match ui.ctx().theme() {
+                egui::Theme::Dark => Color32::BLACK,
+                egui::Theme::Light => Color32::LIGHT_GRAY,
+            };
+            egui::frame::Frame::new()
+                .corner_radius(10)
+                .inner_margin(10)
+                .fill(background)
+                .show(ui, |ui| {
+                    ui.label(RichText::new(&file_string).monospace());
+                });
         }
     }
 
@@ -1149,6 +1297,41 @@ impl eframe::App for MyApp {
                     }
                     self.pairing_file_message = Some(pairing_file_message);
                 }
+                GuiCommands::WirelessPairingStatus(status) => {
+                    self.wireless.status = Some(status);
+                }
+                GuiCommands::WirelessPairingPin(pin) => {
+                    self.wireless.pin = Some(pin);
+                    self.wireless.status = Some(t!("wireless_pair_enter_pin_status").to_string());
+                }
+                GuiCommands::WirelessPairingResult(res) => {
+                    self.wireless.running = false;
+                    self.wireless.pin = None;
+                    match res {
+                        Ok(payload) => {
+                            self.wireless.status = Some(t!("wireless_pair_success").to_string());
+                            self.wireless.pairing_file_string = match payload.display_string() {
+                                Ok(serialized) => Some(serialized),
+                                Err(e) => {
+                                    self.wireless.status = Some(e.to_string());
+                                    None
+                                }
+                            };
+                            self.wireless.pairing_file = Some(payload);
+                        }
+                        Err(e) => {
+                            self.wireless.pairing_file = None;
+                            self.wireless.pairing_file_string = None;
+                            self.wireless.status =
+                                Some(t!("wireless_pair_failed", error = e.to_string()).to_string());
+                        }
+                    }
+                }
+                GuiCommands::WirelessPairingStopped => {
+                    self.wireless.running = false;
+                    self.wireless.pin = None;
+                    self.wireless.status = Some(t!("wireless_pair_stopped").to_string());
+                }
             },
             Err(e) => match e {
                 tokio::sync::mpsc::error::TryRecvError::Empty => {}
@@ -1210,6 +1393,43 @@ impl eframe::App for MyApp {
                         });
                     });
                 });
+
+                let mut pairing_mode_changed = false;
+                ui.horizontal(|ui| {
+                    ui.label(t!("pairing_type"));
+                    pairing_mode_changed |= ui
+                        .radio_value(&mut self.pairing_mode, PairingMode::Lockdown, t!("lockdown"))
+                        .changed();
+                    pairing_mode_changed |= ui
+                        .radio_value(
+                            &mut self.pairing_mode,
+                            PairingMode::RemotePairing,
+                            t!("rp_pairing"),
+                        )
+                        .changed();
+                    pairing_mode_changed |= ui
+                        .radio_value(
+                            &mut self.pairing_mode,
+                            PairingMode::WirelessPairing,
+                            t!("wireless"),
+                        )
+                        .changed();
+                });
+                if pairing_mode_changed {
+                    self.reset_pairing_state();
+                    if self.pairing_mode != PairingMode::WirelessPairing && self.wireless.running {
+                        self.idevice_sender
+                            .send(IdeviceCommands::StopWirelessPairing)
+                            .unwrap();
+                        self.wireless.running = false;
+                        self.wireless.pin = None;
+                    }
+                }
+                if self.pairing_mode == PairingMode::WirelessPairing {
+                    self.wireless_pairing_ui(ui);
+                    return;
+                }
+
                 let mut pending_selection: Option<(String, UsbmuxdDevice)> = None;
                 match self.devices.as_ref() {
                     Some(devs) => {
@@ -1270,26 +1490,7 @@ impl eframe::App for MyApp {
                     .and_then(|x| x.get(&self.selected_device))
                     .cloned();
                 if let Some(dev) = selected_device {
-                    let mut pairing_mode_changed = false;
-                    ui.horizontal(|ui| {
-                        ui.label(t!("pairing_type"));
-                        pairing_mode_changed |= ui
-                            .radio_value(
-                                &mut self.pairing_mode,
-                                PairingMode::Lockdown,
-                                t!("lockdown"),
-                            )
-                            .changed();
-                        pairing_mode_changed |= ui
-                            .radio_value(
-                                &mut self.pairing_mode,
-                                PairingMode::RemotePairing,
-                                t!("rp_pairing"),
-                            )
-                            .changed();
-                    });
                     if pairing_mode_changed {
-                        self.reset_pairing_state();
                         self.idevice_sender
                             .send(IdeviceCommands::InstalledApps((
                                 dev.clone(),
@@ -1376,6 +1577,7 @@ impl eframe::App for MyApp {
                         let show_generate = match self.pairing_mode {
                             PairingMode::RemotePairing => true,
                             PairingMode::Lockdown => cfg!(feature = "generate"),
+                            PairingMode::WirelessPairing => false,
                         };
                         if show_generate {
                             ui.vertical(|ui| {
@@ -1387,6 +1589,7 @@ impl eframe::App for MyApp {
                                     PairingMode::RemotePairing => {
                                         ui.label(t!("generate_rp_help"));
                                     }
+                                    PairingMode::WirelessPairing => {}
                                 }
                                 if ui.button(t!("generate")).clicked() {
                                     self.pairing_file = None;
