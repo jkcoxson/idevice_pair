@@ -6,6 +6,7 @@ A cross-platform GUI application for managing iOS device pairing and wireless de
 
 - **Device Management**: Automatically discover and connect to iOS devices via USB
 - **Pairing Files**: Generate, load, and validate device pairing files
+- **Wireless Pairing**: Pair an RPPairing file over Wi-Fi instead of holding open a USB tunnel
 - **App Integration**: Support to install to popular apps including:
   - [SideStore](https://github.com/SideStore/SideStore)
   - [LiveContainer+SideStore](https://github.com/LiveContainer/LiveContainer)

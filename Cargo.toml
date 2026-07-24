@@ -4,7 +4,7 @@ version = "0.1.14"
 edition = "2024"
 
 [dependencies]
-idevice = { version = "0.1.61", features = [
+idevice = { version = "0.1.64", features = [
   "pair",
   "usbmuxd",
   "installation_proxy",
@@ -35,6 +35,7 @@ plist = { version = "1.7" }
 log = { version = "0.4" }
 uuid = { version = "1.16", features = ["v4"] }
 mdns = { version = "3" }
+mdns-sd = { version = "0.19" }
 futures-util = { version = "0.3" }
 rust-i18n = "3"
 
