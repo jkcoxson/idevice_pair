@@ -32,6 +32,8 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 mod discover;
 mod mount;
 mod pair_host;
+#[cfg(target_os = "macos")]
+mod share;
 
 rust_i18n::i18n!("locales", fallback = "en");
 use rust_i18n::t;
@@ -281,6 +283,8 @@ fn main() {
         connection_type: ConnectionType::Wired,
         wireless_pairing_active: false,
         wireless_pairing_pin: None,
+        #[cfg(target_os = "macos")]
+        share_picker: None,
         save_error: None,
         installed_apps: None,
         install_res: HashMap::new(),
@@ -991,6 +995,8 @@ struct MyApp {
 
     wireless_pairing_active: bool,
     wireless_pairing_pin: Option<String>,
+    #[cfg(target_os = "macos")]
+    share_picker: Option<objc2::rc::Retained<objc2_app_kit::NSSharingServicePicker>>,
 
     // Save
     save_error: Option<String>,
@@ -1040,6 +1046,10 @@ impl MyApp {
         }
         self.wireless_pairing_active = false;
         self.wireless_pairing_pin = None;
+        #[cfg(target_os = "macos")]
+        {
+            self.share_picker = None;
+        }
     }
 
     fn save_pairing_file(&mut self, default_name: &str) {
@@ -1102,7 +1112,8 @@ impl MyApp {
         self.pairing_file_message = Some(status);
     }
 
-    fn wireless_pairing_ui(&mut self, ui: &mut egui::Ui) {
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
+    fn wireless_pairing_ui(&mut self, ui: &mut egui::Ui, frame: &eframe::Frame) {
         ui.vertical(|ui| {
             ui.heading(t!("wireless_pairing_title"));
             ui.label(t!("wireless_pairing_help"));
@@ -1157,6 +1168,27 @@ impl MyApp {
                     if ui.button(t!("save_to_file")).clicked() {
                         self.save_pairing_file("pairingFile.plist");
                     }
+
+                    #[cfg(target_os = "macos")]
+                    if ui.button(t!("share_file")).clicked() {
+                        self.save_error = None;
+                        match self.pairing_file.as_ref().map(PairingPayload::bytes) {
+                            Some(Ok(bytes)) => {
+                                let path = std::env::temp_dir().join("pairingFile.plist");
+                                match std::fs::write(&path, &bytes) {
+                                    Ok(()) => match share::share_file(frame, &path) {
+                                        Ok(picker) => self.share_picker = Some(picker),
+                                        Err(e) => self.save_error = Some(e),
+                                    },
+                                    Err(e) => self.save_error = Some(e.to_string()),
+                                }
+                            }
+                            Some(Err(e)) => self.save_error = Some(e.to_string()),
+                            None => {
+                                self.save_error = Some("No pairing file loaded".to_string())
+                            }
+                        }
+                    }
                 });
                 let p_background_color = match ui.ctx().theme() {
                     egui::Theme::Dark => Color32::BLACK,
@@ -1171,7 +1203,7 @@ impl MyApp {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         if self.wireless_pairing_active {
             ctx.request_repaint_after(std::time::Duration::from_millis(150));
         }
@@ -1349,7 +1381,7 @@ impl eframe::App for MyApp {
 
                 match self.connection_type {
                     ConnectionType::Wireless => {
-                        self.wireless_pairing_ui(ui);
+                        self.wireless_pairing_ui(ui, frame);
                     }
                     ConnectionType::Wired => {
                         let mut pending_selection: Option<(String, UsbmuxdDevice)> = None;
