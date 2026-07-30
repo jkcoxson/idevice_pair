@@ -1,49 +1,47 @@
 [package]
 name = "idevice_pair"
-version = "0.1.14"
+version = "0.2.0"
 edition = "2024"
+rust-version = "1.92"
 
 [dependencies]
-idevice = { version = "0.1.61", features = [
-  "pair",
-  "usbmuxd",
-  "installation_proxy",
+idevice = { version = "0.1.65", features = [
   "afc",
-  "house_arrest",
-  "mobile_image_mounter",
   "core_device_proxy",
+  "house_arrest",
+  "installation_proxy",
+  "mdns",
+  "mobile_image_mounter",
+  "pair",
   "remote_pairing",
   "rsd",
-  "tunnel_tcp_stack",
+  "tcp",
   "tss",
+  "tunnel_tcp_stack",
+  "usbmuxd",
 ] }
-egui = "0.33.3"
-egui_logger = { version = "0.9" }
-eframe = { version = "0.33.3", default-features = false, features = [
+eframe = { version = "0.35.0", default-features = false, features = [
   "default_fonts",
   "accesskit",
   "wgpu",
-  "glow",
+] }
+rfd = { version = "0.17", default-features = false }
+tokio = { version = "1.53", features = ["rt-multi-thread", "net", "sync", "time"] }
+futures-util = "0.3.33"
+mdns-sd = "0.20"
+uuid = { version = "1.24", features = ["v4"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+[build-dependencies]
+reqwest = { version = "0.13", features = ["blocking"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+eframe = { version = "0.35.0", default-features = false, features = [
   "wayland",
   "x11",
 ] }
-wgpu = { version = "27", features = ["dx12", "vulkan", "metal", "gles"] }
-naga = { version = "27", features = ["termcolor"] }
-rfd = { version = "0.15", features = ["gtk3"], default-features = false }
-tokio = { version = "1.45", features = ["full"] }
-plist = { version = "1.7" }
-log = { version = "0.4" }
-uuid = { version = "1.16", features = ["v4"] }
-mdns = { version = "3" }
-futures-util = { version = "0.3" }
-rust-i18n = "3"
-
-[build-dependencies]
-reqwest = { version = "0.12", features = ["blocking"] }
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 
 [target.'cfg(windows)'.build-dependencies]
-winres = "0.1"
-
-[features]
-generate = []
-default = ["generate"]
+winresource = "0.1"

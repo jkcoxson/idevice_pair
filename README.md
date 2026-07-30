@@ -1,165 +1,108 @@
 # idevice_pair
 
-A cross-platform GUI application for managing iOS device pairing and wireless debugging. This tool provides an easy-to-use interface for managing pairing files which work with various iOS applications.
+A cross-platform GUI for creating iOS pairing files, over USB or over Wi-Fi.
 
 ## Features
 
-- **Device Management**: Automatically discover and connect to iOS devices via USB
-- **Pairing Files**: Generate, load, and validate device pairing files
-- **App Integration**: Support to install to popular apps including:
-  - [SideStore](https://github.com/SideStore/SideStore)
-  - [LiveContainer+SideStore](https://github.com/LiveContainer/LiveContainer)
-  - [StikDebug](https://github.com/StephenDev0/StikDebug)
-  - [SparseBox](https://github.com/spadaria/SparseBox)
-  - [Feather](https://github.com/khcrysalis/Feather)
-  - [Protokolle](https://github.com/khcrysalis/Protokolle)
-  - [Antrag](https://github.com/khcrysalis/Antrag)
-  - [KSign](https://github.com/Nyasami/Ksign)
-  - [EnsWilde](https://github.com/YangJiiii/EnsWilde)
-  - [Reynard Browser](https://github.com/minh-ton/reynard-browser)
-  - [Auto Capture](https://apps.apple.com/us/app/dev-auto-capture/id6755616902)
-  - [StosDebug](https://github.com/stossy11/StosDebug)
-- **Developer Mode**: Monitor developer mode status
-- **Developer Disk Image Mounting**: Automatically mount required developer images
+- **Devices over USB and Wi-Fi**: usbmuxd devices show up automatically, and a device
+  running iOS 27 or later can pair to this computer over the network with no cable
+- **Pairing files**: create a lockdown or a remote pairing (RPPairing) file on either transport
+- **Two destinations**: save the file to disk, or write it straight into an app's
+  Documents directory over AFC
+- **Validation**: check that a file you just created actually works
+- **Device state**: developer mode, developer disk image mounting, and wireless
+  debugging (enabled over USB so the device can be reached over Wi-Fi later)
+
+Apps with a known pairing file location:
+
+- [SideStore](https://github.com/SideStore/SideStore)
+- [LiveContainer+SideStore](https://github.com/LiveContainer/LiveContainer)
+- [StikDebug](https://github.com/StephenDev0/StikDebug)
+- [SparseBox](https://github.com/spadaria/SparseBox)
+- [Feather](https://github.com/khcrysalis/Feather)
+- [Protokolle](https://github.com/khcrysalis/Protokolle)
+- [Antrag](https://github.com/khcrysalis/Antrag)
+- [KSign](https://github.com/Nyasami/Ksign)
+- [EnsWilde](https://github.com/YangJiiii/EnsWilde)
+- [Reynard Browser](https://github.com/minh-ton/reynard-browser)
+- [Auto Capture](https://apps.apple.com/us/app/dev-auto-capture/id6755616902)
+- [StosDebug](https://github.com/stossy11/StosDebug)
+- [StikStore](https://github.com/StephenDev0/StikDebug)
 
 ## Prerequisites
 
-- **macOS/Linux/Windows**: Cross-platform support, must have usbmuxd installed
-- **iOS/iPadOS Device**: Must have a passcode set and be connected via USB
-- **Rust**: Required for building from source
+- **macOS/Linux/Windows**, with usbmuxd installed for USB devices
+- **An iOS/iPadOS device** with a passcode set
+- **Rust**, to build from source
 
-## Building from Source
+## Installation
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/jkcoxson/idevice_pair.git
-   cd idevice_pair
-   ```
-
-2. Build the application:
-   ```bash
-   cargo build --release
-   ```
-
-3. Run the application:
-   ```bash
-   cargo run --release
-   ```
-
-## Usage
-
-### Getting Started
-
-1. **Connect your iOS device** via USB to your computer
-2. **Launch the application** - it will automatically scan for connected devices
-3. **Select your device** from the dropdown menu if not already selected
-
-### Managing Pairing Files
-
-The application can generate and manage pairing files for various applications:
-
-1. **Generate new pairing file**: Click `Generate` to create a fresh pairing
-2. **Load existing pairing file**: Click `Load` to import from your computer
-3. **Save pairing file**: Export the pairing file to your computer or install to your supported applications
-4. **Validate pairing**: Test the pairing file against a local network-connected device
-
-## Pairing Guide
-
-### Prerequisites for Pairing
-
-Before creating a pairing file, ensure you have:
-
-1. **Set a passcode** on your iOS device
-
-(For maximum performance, you should also)
-
-2. **Sideloaded an app** (can be done with [SideStore](https://sidestore.io/) or a certificate + signer)
-
-3. **Enabled Developer Mode** on your iOS/iPadOS device (found in Settings → Privacy & Security after sideloading an app)
-
-### Installation Instructions
-
-#### macOS
+### macOS
 1. Download [idevice_pair for macOS](https://github.com/jkcoxson/idevice_pair/releases/latest/download/idevice_pair--macos-universal.dmg)
-2. Open the Disk Image and drag `idevice_pair` to `Applications`
+2. Open the disk image and drag `idevice_pair` to `Applications`
 
-#### Windows
-1. Install [iTunes](https://apple.com/itunes/download/win64) from Apple's website
-2. Download [idevice_pair for Windows](https://github.com/jkcoxson/idevice_pair/releases/latest/download/idevice_pair--windows-x86_64.exe) and save it to a memorable location
+### Windows
+1. Install [iTunes](https://apple.com/itunes/download/win64)
+2. Download [idevice_pair for Windows](https://github.com/jkcoxson/idevice_pair/releases/latest/download/idevice_pair--windows-x86_64.exe)
 
-#### Linux
-1. Install usbmuxd: 
+### Linux
+1. Install usbmuxd:
    ```bash
    sudo apt install -y usbmuxd
    ```
-2. Download idevice_pair for your architecture and save it to a memorable location:
+2. Download the AppImage for your architecture and make it executable:
    - [x86_64](https://github.com/jkcoxson/idevice_pair/releases/latest/download/idevice_pair--linux-x86_64.AppImage)
    - [AArch64](https://github.com/jkcoxson/idevice_pair/releases/latest/download/idevice_pair--linux-aarch64.AppImage)
-3. Make the downloaded file executable
 
-### Pairing Instructions
+### From source
+```bash
+git clone https://github.com/jkcoxson/idevice_pair.git
+cd idevice_pair
+cargo run --release
+```
 
-1. **Connect your device** to your computer via USB cable
-   - If prompted, select `Trust` and enter your passcode
-2. **Open idevice_pair** and select your device from the dropdown menu
-3. **Select pairing mode**, `RPPairing` for iOS 17.4+, `Lockdown` for older verions.
-5. **Obtain pairing file:**
-   - Ensure your device is unlocked and on the home screen
-   - **RPPairing**: click `Generate`, **Lockdown**: click `Load`. 
-   - If prompted on your device, tap `Trust` and enter your passcode
-6. **Install/Place in your app**:
-   - Keep your device unlocked and on the home screen
-   - Scroll down and click `Install` under your target application (e.g., "StikDebug")
-   - You should see `Success` appear in green
+## Usage
 
-## Supported Applications
+### Over USB
 
-The tool includes built-in support for pairing file formats used by:
+1. Connect the device and tap `Trust` if asked
+2. Pick it from the device dropdown
+3. Choose `Lockdown` or `Remote pairing`, then click `Create`
+   - Remote pairing needs iOS 17.4 or later; lockdown works everywhere
+   - Lockdown reuses the record usbmuxd already holds, and only pairs if there isn't one
+   - Keep the device unlocked on the home screen while pairing
+4. Click `Save to file…`, or click an app's name to write the file into it
 
-- **SideStore**: `ALTPairingFile.mobiledevicepairing`
-- **LiveContainer+SideStore**: `SideStore/Documents/ALTPairingFile.mobiledevicepairing`
-- **StikDebug**: RPPairing: `rp_pairing_file.plist`, Lockdown: `pairingFile.plist`.
-- **SparseBox**: `pairingFile.plist`
-- **Feather**: `pairingFile.plist`
-- **Protokolle**: `pairingFile.plist`
-- **Antrag**: `pairingFile.plist`
-- **KSign**: `pairingFile.plist`
+A device usbmuxd sees over Wi-Fi is already paired, so it appears in the dropdown too
+and works the same as a cabled one, without the cable.
 
-## Dependencies
+### Over Wi-Fi
 
-This project uses several key dependencies:
+Requires iOS 27 or later, with both the device and computer on the same network.
 
-- **[idevice](https://crates.io/crates/idevice)**: Core iOS device communication library
-- **[egui](https://crates.io/crates/egui)**: Immediate mode GUI framework
-- **[eframe](https://crates.io/crates/eframe)**: Application framework for egui
-- **[tokio](https://crates.io/crates/tokio)**: Asynchronous runtime
-- **[rfd](https://crates.io/crates/rfd)**: Native file dialogs
+1. Click `Pair over Wi-Fi`
+2. Pick this computer on your device
+3. Type the code shown by idevice_pair into your device
+4. The device joins the dropdown for as long as the app is open
 
-For a complete list of dependencies, see [`Cargo.toml`](Cargo.toml).
-
-## Translation
-
-This project supports multiple languages.
-
-1. Locate the `locales/` directory.
-2. Create a new `.toml` file named with your language code.
-3. Use `en.toml` as a template and translate the strings.
+The remote pairing is only kept in memory, so pair again after a restart. The
+RPPairing record created by Wi-Fi onboarding is loaded automatically on the device
+page. Lockdown pairing is unavailable for this transport; connect through usbmuxd
+to obtain a lockdown pairing file.
 
 ## Troubleshooting
 
-### Device Not Detected
-- Ensure your iOS device is connected via USB
-- Check that the device is trusted on your computer
-- Try disconnecting and reconnecting the device
+### Device not detected
+- Check the device is connected and trusted, or reconnect it
+- On Linux, make sure the usbmuxd service is running
 
-### Pairing File Issues
-- Ensure Developer Mode is enabled on your iOS device
-- Verify the pairing file format matches your target application (.plist or .mobiledevicepairing)
-- Try creating a fresh pairing file using the `Generate` (RPPairing) or `Load` (Lockdown) button and reinstalling it if it doesn't function as expected
-  
-### Wireless Connection Issues
-- Verify both devices are on the same network
-- Check firewall settings that might block port 62078
+### Wireless pairing doesn't show this computer
+- Both sides must be on the same network, with mDNS not blocked
+- Only iOS 27 and later can start pairing from the device
+
+### Pairing file doesn't work in an app
+- Check the app expects the kind of file you created
+- Create a fresh one and use `Validate` to confirm it works
 
 ## Contributing
 
@@ -167,9 +110,4 @@ Contributions are welcome! Please feel free to submit issues, feature requests, 
 
 ## License
 
-This project is licensed under the MIT License.
-
-## Acknowledgments
-
-- Built with the [idevice](https://crates.io/crates/idevice) library for iOS device communication
-- GUI powered by [egui](https://github.com/emilk/egui)
+MIT

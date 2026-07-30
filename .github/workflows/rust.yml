@@ -55,10 +55,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             appstream \
-            libatk1.0-dev \
             libfuse2t64 \
-            libglib2.0-dev \
-            libgtk-3-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
             pkg-config \
             usbmuxd
 
@@ -73,7 +74,7 @@ jobs:
           restore-keys: linux-cargo-
 
       - name: Build binary
-        run: cargo build --release --no-default-features --bin ${{ env.BINARY_NAME }} --target ${{ matrix.target }}
+        run: cargo build --release --bin ${{ env.BINARY_NAME }} --target ${{ matrix.target }}
 
       - name: Download appimagetool
         run: |
@@ -144,7 +145,7 @@ jobs:
       - name: Build binary
         shell: bash
         run: |
-          cargo build --release --no-default-features --bin ${{ env.BINARY_NAME }} --target ${{ matrix.target }}
+          cargo build --release --bin ${{ env.BINARY_NAME }} --target ${{ matrix.target }}
           mkdir -p dist
           cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}.exe \
             dist/${{ env.APP_NAME }}--windows-${{ matrix.arch }}.exe
@@ -188,7 +189,6 @@ jobs:
       - name: Build ${{ matrix.arch }} slice
         run: |
           cargo build --release \
-            --no-default-features \
             --bin ${{ env.BINARY_NAME }} \
             --target ${{ matrix.target }}
 
@@ -258,7 +258,7 @@ jobs:
           <plist version="1.0"><dict>
             <key>CFBundleName</key><string>${{ env.APP_NAME }}</string>
             <key>CFBundleDisplayName</key><string>${{ env.APP_NAME }}</string>
-            <key>CFBundleIdentifier</key><string>com.github.se2cird2.${{ env.APP_NAME }}</string>
+            <key>CFBundleIdentifier</key><string>com.jkcoxson.${{ env.APP_NAME }}</string>
             <key>CFBundleVersion</key><string>${VERSION}</string>
             <key>CFBundleShortVersionString</key><string>${VERSION}</string>
             <key>CFBundleExecutable</key><string>${{ env.APP_NAME }}</string>
