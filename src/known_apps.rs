@@ -29,7 +29,7 @@ const REMOTE: &[KnownApp] = &[
     ("Protokolle", PLIST),
     ("Reynard", PLIST),
     ("SideStore", ALT),
-    ("StikDebug (Sideloaded)", "rp_pairing_file.plist"),
+    ("StikDebug (Sideloaded)", PLIST),
     ("StosDebug", PLIST),
 ];
 

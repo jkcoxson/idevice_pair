@@ -5,7 +5,7 @@ use idevice::{
     remote_pairing::{RemotePairingClient, RpPairingFile},
 };
 
-const RP_FILE_NAME: &str = "rp_pairing_file.plist";
+const RP_FILE_NAME: &str = "pairingFile.plist";
 const TUNNEL_SERVICE: &str = "com.apple.internal.dt.coredevice.untrusted.tunnelservice";
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
