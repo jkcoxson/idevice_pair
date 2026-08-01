@@ -63,36 +63,59 @@ pub fn logs(app: &mut App, ui: &mut egui::Ui) {
 }
 
 pub fn wireless_modal(app: &mut App, ctx: &egui::Context) {
-    let Some(state) = &app.wireless else {
+    let Some(state) = &mut app.wireless else {
         return;
     };
 
     let mut close = false;
+    let mut submitted_pin = None;
     egui::Modal::new(egui::Id::new("wireless")).show(ctx, |ui| {
         ui.set_width(360.0);
         ui.heading("Pair over Wi-Fi");
-        widgets::label(
-            ui,
-            "Wireless pairing is only available on iOS 27 and later. On your device, go to Settings → Privacy & Security → Developer Mode.",
-        );
-        ui.add_space(10.0);
-
         match state {
-            Wireless::Advertising(name) => {
-                ui.label(format!("This computer is offering to pair as “{name}”."));
-                widgets::label(ui, "Pick it on your device to start pairing.");
+            Wireless::Advertising(host) => {
+                widgets::label(
+                    ui,
+                    "On your iPhone/iPad, enable Developer Mode in Settings → Privacy & Security.",
+                );
+                ui.add_space(10.0);
+                ui.label(format!("This computer is offering to pair as “{host}”."));
+                widgets::label(ui, "Pick it on your iPhone/iPad to start pairing.");
+                ui.add_space(6.0);
+                widgets::spinner(ui);
+            }
+            Wireless::ConnectingAppleTv(name) => {
+                ui.label(format!("Connecting to “{name}”…"));
                 ui.add_space(6.0);
                 widgets::spinner(ui);
             }
             Wireless::Connected => {
-                ui.label("A device connected. Waiting for a code…");
+                ui.label("A device connected. Waiting for pairing…");
                 ui.add_space(6.0);
                 widgets::spinner(ui);
+            }
+            Wireless::EnterPin { host, pin } => {
+                ui.label(format!("This computer is pairing as “{host}”."));
+                ui.add_space(6.0);
+                ui.label("Enter the code shown on your Apple TV:");
+                ui.add_space(6.0);
+                ui.add(
+                    egui::TextEdit::singleline(pin)
+                        .char_limit(6)
+                        .desired_width(120.0),
+                );
+                pin.retain(|character| character.is_ascii_digit());
+                let valid = pin.len() == 6;
+                let enter = valid && ui.input(|input| input.key_pressed(egui::Key::Enter));
+                let clicked = ui.add_enabled(valid, egui::Button::new("Pair")).clicked();
+                if enter || clicked {
+                    submitted_pin = Some(pin.clone());
+                }
             }
             Wireless::Pin(pin) => {
                 ui.label("Enter this code on your device:");
                 ui.add_space(6.0);
-                ui.label(RichText::new(pin).monospace().size(30.0).strong());
+                ui.label(RichText::new(pin.as_str()).monospace().size(30.0).strong());
             }
             Wireless::Failed(message) => widgets::error(ui, message),
         }
@@ -108,7 +131,9 @@ pub fn wireless_modal(app: &mut App, ctx: &egui::Context) {
         }
     });
 
-    if close {
+    if let Some(pin) = submitted_pin {
+        app.submit_wireless_pin(pin);
+    } else if close {
         app.stop_wireless_pairing();
     }
 }

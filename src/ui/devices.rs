@@ -13,6 +13,7 @@ pub fn picker(app: &mut App, ui: &mut Ui) {
         .map_or_else(|| "No device".into(), label);
 
     let mut pick = None;
+    let mut pair = None;
 
     egui::ComboBox::from_id_salt("devices")
         .selected_text(selected_text)
@@ -26,9 +27,19 @@ pub fn picker(app: &mut App, ui: &mut Ui) {
                     pick = Some(device.key.clone());
                 }
             }
+            for device in &app.apple_tvs {
+                if ui
+                    .selectable_label(false, format!("{} · available to pair", device.name))
+                    .clicked()
+                {
+                    pair = Some(device.clone());
+                }
+            }
         });
 
-    if let Some(key) = pick {
+    if let Some(device) = pair {
+        app.pair_apple_tv(device);
+    } else if let Some(key) = pick {
         app.select(key);
     }
     if ui.button("Pair over Wi-Fi").clicked() {

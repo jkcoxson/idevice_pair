@@ -12,13 +12,13 @@ use idevice::{
 };
 use tokio::sync::{
     Mutex, OwnedMutexGuard,
-    mpsc::{UnboundedReceiver, unbounded_channel},
+    mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
 };
 use tracing::debug;
 
 use super::{
-    Backend, Check, Command, DeviceKey, DeviceSummary, Event, Events, InstalledApp, PairingKind,
-    Transport, WirelessStatus, ddi, install,
+    AppleTv, Backend, Check, Command, DeviceKey, DeviceSummary, Event, Events, InstalledApp,
+    PairingKind, Transport, WirelessStatus, ddi, discovery, install,
     link::Link,
     pairing::{self, Payload},
     usb, validate,
@@ -44,6 +44,7 @@ pub fn spawn(ctx: egui::Context) -> (Backend, UnboundedReceiver<Event>) {
                 ctx,
             }));
             worker.clone().watch_usb();
+            worker.clone().watch_apple_tvs();
 
             while let Some(command) = commands.recv().await {
                 let worker = worker.clone();
@@ -64,7 +65,10 @@ struct Worker {
     events: Events,
     identity: HostIdentity,
     devices: Mutex<HashMap<DeviceKey, Device>>,
+    apple_tvs: Mutex<HashMap<String, discovery::ManualPairingDevice>>,
+    paired_apple_tvs: Mutex<HashSet<String>>,
     pairing_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    wireless_pin: Mutex<Option<UnboundedSender<String>>>,
 }
 
 struct Device {
@@ -124,7 +128,10 @@ impl Worker {
             events,
             identity: HostIdentity::generate(),
             devices: Mutex::new(HashMap::new()),
+            apple_tvs: Mutex::new(HashMap::new()),
+            paired_apple_tvs: Mutex::new(HashSet::new()),
             pairing_task: Mutex::new(None),
+            wireless_pin: Mutex::new(None),
         }
     }
 
@@ -136,6 +143,8 @@ impl Worker {
             Command::Validate { key, ip } => self.validate(key, ip).await,
             Command::Install { key, app } => self.install(key, app).await,
             Command::StartWirelessPairing => self.start_wireless_pairing().await,
+            Command::PairAppleTv(id) => self.start_apple_tv_pairing(id).await,
+            Command::SubmitWirelessPin(pin) => self.submit_wireless_pin(pin).await,
             Command::StopWirelessPairing => self.stop_wireless_pairing().await,
         }
     }
@@ -343,7 +352,43 @@ impl Worker {
     }
 
     async fn run_wireless_pairing(self: Arc<Self>) {
-        match wireless::accept_pairing(&self.identity, &self.events).await {
+        let result = wireless::accept_pairing(&self.identity, &self.events).await;
+        self.finish_wireless_pairing(result).await;
+    }
+
+    async fn start_apple_tv_pairing(self: &Arc<Self>, id: String) {
+        let Some(device) = self.apple_tvs.lock().await.get(&id).cloned() else {
+            self.events
+                .send(Event::Wireless(WirelessStatus::Failed(text(
+                    IdeviceError::DeviceNotFound,
+                ))));
+            return;
+        };
+        let mut task = self.pairing_task.lock().await;
+        if task.is_some() {
+            return;
+        }
+
+        let worker = self.clone();
+        *task = Some(tokio::spawn(
+            worker.run_apple_tv_pairing(id, device.addresses),
+        ));
+    }
+
+    async fn run_apple_tv_pairing(self: Arc<Self>, id: String, addresses: discovery::Addresses) {
+        let (pin_sender, pin_receiver) = unbounded_channel();
+        *self.wireless_pin.lock().await = Some(pin_sender);
+        let result = wireless::pair_apple_tv(&self.events, addresses, pin_receiver).await;
+        *self.wireless_pin.lock().await = None;
+        if result.is_ok() {
+            self.paired_apple_tvs.lock().await.insert(id);
+            self.send_apple_tvs().await;
+        }
+        self.finish_wireless_pairing(result).await;
+    }
+
+    async fn finish_wireless_pairing(&self, result: Result<WirelessDevice, IdeviceError>) {
+        match result {
             Ok(device) => {
                 let key = self.add_wireless(device).await;
                 self.events
@@ -361,6 +406,13 @@ impl Worker {
         let task = self.pairing_task.lock().await.take();
         if let Some(task) = task {
             task.abort();
+        }
+        *self.wireless_pin.lock().await = None;
+    }
+
+    async fn submit_wireless_pin(&self, pin: String) {
+        if let Some(sender) = self.wireless_pin.lock().await.take() {
+            let _ = sender.send(pin);
         }
     }
 
@@ -397,6 +449,36 @@ impl Worker {
                 self.refresh_devices().await;
             }
         });
+    }
+
+    fn watch_apple_tvs(self: Arc<Self>) {
+        let (sender, mut updates) = unbounded_channel();
+        tokio::spawn(discovery::watch_manual_pairing(move |devices| {
+            let _ = sender.send(devices);
+        }));
+        tokio::spawn(async move {
+            while let Some(devices) = updates.recv().await {
+                *self.apple_tvs.lock().await = devices
+                    .into_iter()
+                    .map(|device| (device.summary.id.clone(), device))
+                    .collect();
+                self.send_apple_tvs().await;
+            }
+        });
+    }
+
+    async fn send_apple_tvs(&self) {
+        let paired = self.paired_apple_tvs.lock().await.clone();
+        let mut devices: Vec<AppleTv> = self
+            .apple_tvs
+            .lock()
+            .await
+            .values()
+            .filter(|device| !paired.contains(&device.summary.id))
+            .map(|device| device.summary.clone())
+            .collect();
+        devices.sort_by_key(|device| device.name.to_lowercase());
+        self.events.send(Event::AppleTvs(devices));
     }
 
     async fn state(&self, key: &DeviceKey) -> Option<OwnedMutexGuard<State>> {
