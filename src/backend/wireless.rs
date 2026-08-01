@@ -9,7 +9,10 @@ use idevice::{
     tcp::adapter::Adapter,
 };
 use mdns_sd::{ServiceDaemon, ServiceInfo};
-use tokio::{net::TcpListener, sync::mpsc::UnboundedReceiver};
+use tokio::{
+    net::TcpListener,
+    sync::{Mutex, oneshot},
+};
 use tracing::{debug, info};
 
 use super::{Event, Events, WirelessStatus, discovery, host_label, link::Link};
@@ -68,26 +71,25 @@ pub async fn accept_pairing(
 pub async fn pair_apple_tv(
     events: &Events,
     addresses: discovery::Addresses,
-    pin_receiver: UnboundedReceiver<String>,
+    pin_receiver: oneshot::Receiver<String>,
 ) -> Result<WirelessDevice, IdeviceError> {
+    let host = host_label();
+    let mut pairing_file = RpPairingFile::generate(host);
+    let stream = addresses.connect().await?;
     events.send(Event::Wireless(WirelessStatus::Connected));
-
-    let mut pairing_file = RpPairingFile::generate(host_label());
-    let mut client = RemotePairingClient::new(
-        RpPairingSocket::new(addresses.connect().await?),
-        host_label(),
-    );
-    let pin_receiver = Arc::new(tokio::sync::Mutex::new(pin_receiver));
+    let mut client = RemotePairingClient::new(RpPairingSocket::new(stream), host);
+    let pin_receiver = Arc::new(Mutex::new(Some(pin_receiver)));
     let events = events.clone();
     client
         .connect(&mut pairing_file, || {
             let events = events.clone();
             let pin_receiver = pin_receiver.clone();
             async move {
-                events.send(Event::Wireless(WirelessStatus::EnterPin(
-                    host_label().to_string(),
-                )));
-                pin_receiver.lock().await.recv().await.unwrap_or_default()
+                events.send(Event::Wireless(WirelessStatus::EnterPin(host.to_string())));
+                let Some(pin_receiver) = pin_receiver.lock().await.take() else {
+                    return String::new();
+                };
+                pin_receiver.await.unwrap_or_default()
             }
         })
         .await?;

@@ -76,7 +76,7 @@ pub fn wireless_modal(app: &mut App, ctx: &egui::Context) {
             Wireless::Advertising(host) => {
                 widgets::label(
                     ui,
-                    "On your iPhone/iPad, enable Developer Mode in Settings → Privacy & Security.",
+                    "Wireless pairing is only available on iOS 27 and later. On your device, go to Settings → Privacy & Security → Developer Mode.",
                 );
                 ui.add_space(10.0);
                 ui.label(format!("This computer is offering to pair as “{host}”."));
@@ -90,7 +90,7 @@ pub fn wireless_modal(app: &mut App, ctx: &egui::Context) {
                 widgets::spinner(ui);
             }
             Wireless::Connected => {
-                ui.label("A device connected. Waiting for pairing…");
+                ui.label("A device connected. Waiting for a code…");
                 ui.add_space(6.0);
                 widgets::spinner(ui);
             }

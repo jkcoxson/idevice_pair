@@ -61,6 +61,7 @@ pub struct DeviceInfo {
 pub struct AppleTv {
     pub id: String,
     pub name: String,
+    address: discovery::Addresses,
 }
 
 pub enum Check {

@@ -12,7 +12,8 @@ use idevice::{
 };
 use tokio::sync::{
     Mutex, OwnedMutexGuard,
-    mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
+    mpsc::{UnboundedReceiver, unbounded_channel},
+    oneshot,
 };
 use tracing::debug;
 
@@ -65,10 +66,10 @@ struct Worker {
     events: Events,
     identity: HostIdentity,
     devices: Mutex<HashMap<DeviceKey, Device>>,
-    apple_tvs: Mutex<HashMap<String, discovery::ManualPairingDevice>>,
+    apple_tvs: Mutex<HashMap<String, AppleTv>>,
     paired_apple_tvs: Mutex<HashSet<String>>,
     pairing_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    wireless_pin: Mutex<Option<UnboundedSender<String>>>,
+    wireless_pin: Mutex<Option<oneshot::Sender<String>>>,
 }
 
 struct Device {
@@ -347,8 +348,7 @@ impl Worker {
             return;
         }
 
-        let worker = self.clone();
-        *task = Some(tokio::spawn(worker.run_wireless_pairing()));
+        *task = Some(tokio::spawn(self.clone().run_wireless_pairing()));
     }
 
     async fn run_wireless_pairing(self: Arc<Self>) {
@@ -369,14 +369,13 @@ impl Worker {
             return;
         }
 
-        let worker = self.clone();
         *task = Some(tokio::spawn(
-            worker.run_apple_tv_pairing(id, device.addresses),
+            self.clone().run_apple_tv_pairing(id, device.address),
         ));
     }
 
     async fn run_apple_tv_pairing(self: Arc<Self>, id: String, addresses: discovery::Addresses) {
-        let (pin_sender, pin_receiver) = unbounded_channel();
+        let (pin_sender, pin_receiver) = oneshot::channel();
         *self.wireless_pin.lock().await = Some(pin_sender);
         let result = wireless::pair_apple_tv(&self.events, addresses, pin_receiver).await;
         *self.wireless_pin.lock().await = None;
@@ -460,7 +459,7 @@ impl Worker {
             while let Some(devices) = updates.recv().await {
                 *self.apple_tvs.lock().await = devices
                     .into_iter()
-                    .map(|device| (device.summary.id.clone(), device))
+                    .map(|device| (device.id.clone(), device))
                     .collect();
                 self.send_apple_tvs().await;
             }
@@ -474,8 +473,8 @@ impl Worker {
             .lock()
             .await
             .values()
-            .filter(|device| !paired.contains(&device.summary.id))
-            .map(|device| device.summary.clone())
+            .filter(|device| !paired.contains(&device.id))
+            .cloned()
             .collect();
         devices.sort_by_key(|device| device.name.to_lowercase());
         self.events.send(Event::AppleTvs(devices));

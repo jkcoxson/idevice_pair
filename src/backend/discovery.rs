@@ -21,12 +21,6 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(4);
 #[derive(Clone)]
 pub struct Addresses(SocketAddr);
 
-#[derive(Clone)]
-pub struct ManualPairingDevice {
-    pub summary: AppleTv,
-    pub addresses: Addresses,
-}
-
 impl Addresses {
     pub fn one(ip: IpAddr, port: u16) -> Self {
         Self(SocketAddr::new(ip, port))
@@ -68,16 +62,14 @@ pub async fn find_remote_pairing(alt_irk: &[u8]) -> Option<Addresses> {
     .await
 }
 
-pub async fn watch_manual_pairing(mut update: impl FnMut(Vec<ManualPairingDevice>)) {
-    let Some((daemon, receiver)) = ServiceDaemon::new().ok().and_then(|daemon| {
-        daemon
-            .browse(MANUAL_PAIRING)
-            .ok()
-            .map(|receiver| (daemon, receiver))
-    }) else {
+pub async fn watch_manual_pairing(mut update: impl FnMut(Vec<AppleTv>)) {
+    let Ok(daemon) = ServiceDaemon::new() else {
         return;
     };
-    let mut services = HashMap::<String, ManualPairingDevice>::new();
+    let Ok(receiver) = daemon.browse(MANUAL_PAIRING) else {
+        return;
+    };
+    let mut services = HashMap::new();
 
     loop {
         match receiver.recv_async().await {
@@ -92,19 +84,18 @@ pub async fn watch_manual_pairing(mut update: impl FnMut(Vec<ManualPairingDevice
                     .to_string();
                 services.insert(
                     service.fullname.clone(),
-                    ManualPairingDevice {
-                        summary: AppleTv {
-                            id: service.fullname.clone(),
-                            name,
-                        },
-                        addresses,
+                    AppleTv {
+                        id: service.fullname.clone(),
+                        name,
+                        address: addresses,
                     },
                 );
-                update(apple_tvs(&services));
+                update(services.values().cloned().collect());
             }
             Ok(ServiceEvent::ServiceRemoved(_, id)) => {
-                services.remove(&id);
-                update(apple_tvs(&services));
+                if services.remove(&id).is_some() {
+                    update(services.values().cloned().collect());
+                }
             }
             Ok(_) => {}
             Err(_) => break,
@@ -181,10 +172,4 @@ async fn browse<T>(
 
     let _ = daemon.shutdown();
     found
-}
-
-fn apple_tvs(services: &HashMap<String, ManualPairingDevice>) -> Vec<ManualPairingDevice> {
-    let mut devices: Vec<_> = services.values().cloned().collect();
-    devices.sort_by_key(|device| device.summary.name.to_lowercase());
-    devices
 }
