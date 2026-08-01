@@ -20,12 +20,8 @@ idevice = { version = "0.1.65", features = [
   "tunnel_tcp_stack",
   "usbmuxd",
 ] }
-eframe = { version = "0.35.0", default-features = false, features = [
-  "default_fonts",
-  "accesskit",
-  "wgpu",
-] }
-rfd = { version = "0.17", default-features = false }
+eframe = "0.35.0"
+rfd = "0.17"
 tokio = { version = "1.53", features = ["rt-multi-thread", "net", "sync", "time"] }
 futures-util = "0.3.33"
 mdns-sd = "0.20"
@@ -35,13 +31,6 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [build-dependencies]
 reqwest = { version = "0.13", features = ["blocking"] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-eframe = { version = "0.35.0", default-features = false, features = [
-  "wayland",
-  "x11",
-] }
-rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"
