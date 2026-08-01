@@ -5,7 +5,7 @@ on:
     branches:
       - master
     tags:
-      - "[0-9]*"
+      - "v[0-9]*"
 
   pull_request:
 
@@ -365,17 +365,20 @@ jobs:
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             VERSION="${GITHUB_REF_NAME#v}"
+            TAG="${GITHUB_REF_NAME}"
           else
             VERSION="$(awk -F '"' '/^version = / { print $2; exit }' Cargo.toml)"
             VERSION="${VERSION#v}"
+            TAG="v${VERSION}"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.get_version.outputs.version }}
-          tag_name: ${{ steps.get_version.outputs.version }}
+          tag_name: ${{ steps.get_version.outputs.tag }}
           files: release-assets/*
           generate_release_notes: true
           fail_on_unmatched_files: true
