@@ -5,8 +5,8 @@ use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::{
     backend::{
-        self, Backend, Check, Command, DeviceInfo, DeviceKey, DeviceSummary, Event, InstalledApp,
-        PairingKind, PairingResult, WirelessStatus,
+        self, AppleTv, Backend, Check, Command, DeviceInfo, DeviceKey, DeviceSummary, Event,
+        InstalledApp, PairingKind, PairingResult, WirelessStatus,
     },
     logging::Logs,
     ui,
@@ -16,6 +16,7 @@ pub struct App {
     pub logs: Logs,
     pub show_logs: bool,
     pub devices: Vec<DeviceSummary>,
+    pub apple_tvs: Vec<AppleTv>,
     pub usbmuxd_failure: Option<String>,
     pub selected: Option<DeviceKey>,
     pub pages: HashMap<DeviceKey, Page>,
@@ -74,7 +75,10 @@ impl Page {
 
 pub enum Wireless {
     Advertising(String),
+    ConnectingAppleTv(String),
     Connected,
+    EnterPin { host: String, pin: String },
+    PairingAppleTv,
     Pin(String),
     Failed(String),
 }
@@ -93,6 +97,7 @@ impl App {
             logs,
             show_logs: false,
             devices: Vec::new(),
+            apple_tvs: Vec::new(),
             usbmuxd_failure: None,
             selected: None,
             pages: HashMap::new(),
@@ -128,6 +133,16 @@ impl App {
     pub fn stop_wireless_pairing(&mut self) {
         self.wireless = None;
         self.backend.send(Command::StopWirelessPairing);
+    }
+
+    pub fn submit_wireless_pin(&mut self, pin: String) {
+        self.wireless = Some(Wireless::PairingAppleTv);
+        self.backend.send(Command::SubmitWirelessPin(pin));
+    }
+
+    pub fn pair_apple_tv(&mut self, device: AppleTv) {
+        self.wireless = Some(Wireless::ConnectingAppleTv(device.name.clone()));
+        self.backend.send(Command::PairAppleTv(device));
     }
 
     pub fn act(&mut self, key: &DeviceKey, action: Action) {
@@ -191,6 +206,7 @@ impl App {
                     self.select(self.devices[0].key.clone());
                 }
             }
+            Event::AppleTvs(devices) => self.apple_tvs = devices,
             Event::UsbmuxdFailure(message) => self.usbmuxd_failure = Some(message),
             Event::Info { key, result } => self.page(key).info = Task::Done(result),
             Event::Check { key, check, result } => {
@@ -225,6 +241,12 @@ impl App {
                     self.wireless = Some(Wireless::Advertising(name))
                 }
                 WirelessStatus::Connected => self.wireless = Some(Wireless::Connected),
+                WirelessStatus::EnterPin(host) => {
+                    self.wireless = Some(Wireless::EnterPin {
+                        host,
+                        pin: String::new(),
+                    })
+                }
                 WirelessStatus::Pin(pin) => self.wireless = Some(Wireless::Pin(pin)),
                 WirelessStatus::Failed(message) => self.wireless = Some(Wireless::Failed(message)),
                 WirelessStatus::Paired(key) => {

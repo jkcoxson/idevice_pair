@@ -1,4 +1,4 @@
-use std::net::Ipv4Addr;
+use std::{net::Ipv4Addr, sync::Arc};
 
 use idevice::{
     IdeviceError,
@@ -9,7 +9,10 @@ use idevice::{
     tcp::adapter::Adapter,
 };
 use mdns_sd::{ServiceDaemon, ServiceInfo};
-use tokio::net::TcpListener;
+use tokio::{
+    net::TcpListener,
+    sync::{Mutex, oneshot},
+};
 use tracing::{debug, info};
 
 use super::{Event, Events, WirelessStatus, discovery, host_label, link::Link};
@@ -61,6 +64,36 @@ pub async fn accept_pairing(
     Ok(WirelessDevice {
         udid: peer.remotepairing_udid,
         name: peer.name,
+        pairing_file,
+    })
+}
+
+pub async fn pair_apple_tv(
+    events: &Events,
+    addresses: discovery::Addresses,
+    pin_receiver: oneshot::Receiver<String>,
+) -> Result<WirelessDevice, IdeviceError> {
+    let host = host_label();
+    let mut pairing_file = RpPairingFile::generate(host);
+    let stream = addresses.connect().await?;
+    let mut client = RemotePairingClient::new(RpPairingSocket::new(stream), host);
+    let pin_receiver = Arc::new(Mutex::new(pin_receiver));
+    let events = events.clone();
+    client
+        .connect(&mut pairing_file, || {
+            let events = events.clone();
+            let pin_receiver = pin_receiver.clone();
+            async move {
+                events.send(Event::Wireless(WirelessStatus::EnterPin(host.to_string())));
+                (&mut *pin_receiver.lock().await).await.unwrap_or_default()
+            }
+        })
+        .await?;
+
+    let peer = client.paired_peer_device()?;
+    Ok(WirelessDevice {
+        udid: peer.remotepairing_udid.clone(),
+        name: peer.name.clone(),
         pairing_file,
     })
 }

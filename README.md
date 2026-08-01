@@ -4,8 +4,8 @@ A cross-platform GUI for creating iOS pairing files, over USB or over Wi-Fi.
 
 ## Features
 
-- **Devices over USB and Wi-Fi**: usbmuxd devices show up automatically, and a device
-  running iOS 27 or later can pair to this computer over the network with no cable
+- **Devices over USB and Wi-Fi**: usbmuxd devices show up automatically, and Apple TV
+  or a device running iOS 27 or later can pair over the network with no cable
 - **Pairing files**: create a lockdown or a remote pairing (RPPairing) file on either transport
 - **Two destinations**: save the file to disk, or write it straight into an app's
   Documents directory over AFC
@@ -27,7 +27,7 @@ Apps with a known pairing file location:
 - [Reynard Browser](https://github.com/minh-ton/reynard-browser)
 - [Auto Capture](https://apps.apple.com/us/app/dev-auto-capture/id6755616902)
 - [StosDebug](https://github.com/stossy11/StosDebug)
-- [StikStore](https://github.com/StephenDev0/StikDebug)
+- [StikStore](https://stikstore.app/)
 
 ## Prerequisites
 
@@ -67,7 +67,7 @@ cargo run --release
 
 1. Connect the device and tap `Trust` if asked
 2. Pick it from the device dropdown
-3. Choose `Lockdown` or `Remote pairing`, then click `Create`
+3. Choose `Lockdown` or `Remote pairing`, then click `Load` or `Create`
    - Remote pairing needs iOS 17.4 or later; lockdown works everywhere
    - Lockdown reuses the record usbmuxd already holds, and only pairs if there isn't one
    - Keep the device unlocked on the home screen while pairing
@@ -76,7 +76,7 @@ cargo run --release
 A device usbmuxd sees over Wi-Fi is already paired, so it appears in the dropdown too
 and works the same as a cabled one, without the cable.
 
-### Over Wi-Fi
+### Over Wi-Fi with iPhone or iPad
 
 Requires iOS 27 or later, with both the device and computer on the same network.
 
@@ -90,6 +90,13 @@ RPPairing record created by Wi-Fi onboarding is loaded automatically on the devi
 page. Lockdown pairing is unavailable for this transport; connect through usbmuxd
 to obtain a lockdown pairing file.
 
+### Over Wi-Fi with Apple TV
+
+1. Put the Apple TV into manual remote pairing mode by choosing Settings > Remotes and Devices > Remote App and Devices.
+2. Select the Apple TV from the device dropdown
+3. Enter the code shown on the Apple TV
+4. The Apple TV remains in the dropdown as a paired device for as long as the app is open
+
 ## Troubleshooting
 
 ### Device not detected
@@ -99,6 +106,7 @@ to obtain a lockdown pairing file.
 ### Wireless pairing doesn't show this computer
 - Both sides must be on the same network, with mDNS not blocked
 - Only iOS 27 and later can start pairing from the device
+- For Apple TV, make sure manual pairing mode is open before starting
 
 ### Pairing file doesn't work in an app
 - Check the app expects the kind of file you created

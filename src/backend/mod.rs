@@ -57,6 +57,12 @@ pub struct DeviceInfo {
     pub udid: String,
 }
 
+#[derive(Clone)]
+pub struct AppleTv {
+    pub name: String,
+    address: discovery::Addresses,
+}
+
 pub enum Check {
     WirelessDebugging,
     DeveloperMode,
@@ -70,11 +76,14 @@ pub enum Command {
     Validate { key: DeviceKey, ip: Option<IpAddr> },
     Install { key: DeviceKey, app: InstalledApp },
     StartWirelessPairing,
+    PairAppleTv(AppleTv),
+    SubmitWirelessPin(String),
     StopWirelessPairing,
 }
 
 pub enum Event {
     Devices(Vec<DeviceSummary>),
+    AppleTvs(Vec<AppleTv>),
     UsbmuxdFailure(String),
     Info {
         key: DeviceKey,
@@ -116,6 +125,7 @@ pub enum Event {
 pub enum WirelessStatus {
     Advertising(String),
     Connected,
+    EnterPin(String),
     Pin(String),
     Paired(DeviceKey),
     Failed(String),

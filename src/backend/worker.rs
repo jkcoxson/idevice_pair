@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    future::Future,
     net::IpAddr,
     sync::Arc,
 };
@@ -13,12 +14,13 @@ use idevice::{
 use tokio::sync::{
     Mutex, OwnedMutexGuard,
     mpsc::{UnboundedReceiver, unbounded_channel},
+    oneshot,
 };
 use tracing::debug;
 
 use super::{
-    Backend, Check, Command, DeviceKey, DeviceSummary, Event, Events, InstalledApp, PairingKind,
-    Transport, WirelessStatus, ddi, install,
+    AppleTv, Backend, Check, Command, DeviceKey, DeviceSummary, Event, Events, InstalledApp,
+    PairingKind, Transport, WirelessStatus, ddi, discovery, install,
     link::Link,
     pairing::{self, Payload},
     usb, validate,
@@ -44,6 +46,10 @@ pub fn spawn(ctx: egui::Context) -> (Backend, UnboundedReceiver<Event>) {
                 ctx,
             }));
             worker.clone().watch_usb();
+            let events = worker.events.clone();
+            tokio::spawn(discovery::watch_manual_pairing(move |devices| {
+                events.send(Event::AppleTvs(devices));
+            }));
 
             while let Some(command) = commands.recv().await {
                 let worker = worker.clone();
@@ -65,6 +71,7 @@ struct Worker {
     identity: HostIdentity,
     devices: Mutex<HashMap<DeviceKey, Device>>,
     pairing_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    wireless_pin: Mutex<Option<oneshot::Sender<String>>>,
 }
 
 struct Device {
@@ -125,6 +132,7 @@ impl Worker {
             identity: HostIdentity::generate(),
             devices: Mutex::new(HashMap::new()),
             pairing_task: Mutex::new(None),
+            wireless_pin: Mutex::new(None),
         }
     }
 
@@ -136,6 +144,8 @@ impl Worker {
             Command::Validate { key, ip } => self.validate(key, ip).await,
             Command::Install { key, app } => self.install(key, app).await,
             Command::StartWirelessPairing => self.start_wireless_pairing().await,
+            Command::PairAppleTv(id) => self.start_apple_tv_pairing(id).await,
+            Command::SubmitWirelessPin(pin) => self.submit_wireless_pin(pin).await,
             Command::StopWirelessPairing => self.stop_wireless_pairing().await,
         }
     }
@@ -333,17 +343,43 @@ impl Worker {
     }
 
     async fn start_wireless_pairing(self: &Arc<Self>) {
+        let worker = self.clone();
+        self.start_pairing(async move {
+            wireless::accept_pairing(&worker.identity, &worker.events).await
+        })
+        .await;
+    }
+
+    async fn start_apple_tv_pairing(self: &Arc<Self>, device: AppleTv) {
+        let worker = self.clone();
+        self.start_pairing(async move {
+            let (pin_sender, pin_receiver) = oneshot::channel();
+            *worker.wireless_pin.lock().await = Some(pin_sender);
+            let result =
+                wireless::pair_apple_tv(&worker.events, device.address, pin_receiver).await;
+            *worker.wireless_pin.lock().await = None;
+            result
+        })
+        .await;
+    }
+
+    async fn start_pairing(
+        self: &Arc<Self>,
+        pairing: impl Future<Output = Result<WirelessDevice, IdeviceError>> + Send + 'static,
+    ) {
         let mut task = self.pairing_task.lock().await;
         if task.is_some() {
             return;
         }
 
         let worker = self.clone();
-        *task = Some(tokio::spawn(worker.run_wireless_pairing()));
+        *task = Some(tokio::spawn(async move {
+            worker.finish_wireless_pairing(pairing.await).await;
+        }));
     }
 
-    async fn run_wireless_pairing(self: Arc<Self>) {
-        match wireless::accept_pairing(&self.identity, &self.events).await {
+    async fn finish_wireless_pairing(&self, result: Result<WirelessDevice, IdeviceError>) {
+        match result {
             Ok(device) => {
                 let key = self.add_wireless(device).await;
                 self.events
@@ -361,6 +397,13 @@ impl Worker {
         let task = self.pairing_task.lock().await.take();
         if let Some(task) = task {
             task.abort();
+        }
+        *self.wireless_pin.lock().await = None;
+    }
+
+    async fn submit_wireless_pin(&self, pin: String) {
+        if let Some(sender) = self.wireless_pin.lock().await.take() {
+            let _ = sender.send(pin);
         }
     }
 
