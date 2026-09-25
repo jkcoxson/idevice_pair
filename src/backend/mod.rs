@@ -1,4 +1,3 @@
-mod ddi;
 mod discovery;
 mod install;
 mod link;
@@ -66,7 +65,6 @@ pub struct AppleTv {
 pub enum Check {
     WirelessDebugging,
     DeveloperMode,
-    DeveloperImage,
 }
 
 pub enum Command {

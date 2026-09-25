@@ -91,13 +91,6 @@ fn checks(page: &Page, transport: Transport, ui: &mut Ui) {
         "Enabled",
         "Disabled",
     );
-    widgets::status(
-        ui,
-        "Developer image",
-        &page.developer_image,
-        "Mounted",
-        "Not mounted",
-    );
 }
 
 fn pairing(page: &mut Page, transport: Transport, ui: &mut Ui, action: &mut Option<Action>) {

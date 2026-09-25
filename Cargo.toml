@@ -11,12 +11,10 @@ idevice = { version = "0.1.65", features = [
   "house_arrest",
   "installation_proxy",
   "mdns",
-  "mobile_image_mounter",
   "pair",
   "remote_pairing",
   "rsd",
   "tcp",
-  "tss",
   "tunnel_tcp_stack",
   "usbmuxd",
 ] }
@@ -32,9 +30,6 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 eframe = { version = "0.35.0", features = ["glow"] }
 pollster = "0.4"
-
-[build-dependencies]
-reqwest = { version = "0.13", features = ["blocking"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"

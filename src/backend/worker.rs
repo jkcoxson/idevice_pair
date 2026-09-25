@@ -20,7 +20,7 @@ use tracing::debug;
 
 use super::{
     AppleTv, Backend, Check, Command, DeviceKey, DeviceSummary, Event, Events, InstalledApp,
-    PairingKind, Transport, WirelessStatus, ddi, discovery, install,
+    PairingKind, Transport, WirelessStatus, discovery, install,
     link::Link,
     pairing::{self, Payload},
     usb, validate,
@@ -208,23 +208,9 @@ impl Worker {
         }
         let result = link.developer_mode().await;
         self.check(&key, Check::DeveloperMode, result);
-        let mount = match ddi::mounted(&mut link).await {
-            Ok(false) => {
-                self.check(&key, Check::DeveloperImage, Ok(false));
-                true
-            }
-            result => {
-                self.check(&key, Check::DeveloperImage, result);
-                false
-            }
-        };
         if transport == Transport::Usb {
             let result = link.enable_wireless_debugging().await.map(|()| true);
             self.check(&key, Check::WirelessDebugging, result);
-        }
-        if mount {
-            let result = ddi::mount(&mut link).await.map(|()| true);
-            self.check(&key, Check::DeveloperImage, result);
         }
     }
 

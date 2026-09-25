@@ -139,15 +139,6 @@ impl Link {
             )
             .await
     }
-
-    pub async fn unique_chip_id(&mut self) -> Result<u64, IdeviceError> {
-        self.lockdown()
-            .await?
-            .get_value(Some("UniqueChipID"), None)
-            .await?
-            .as_unsigned_integer()
-            .ok_or_else(|| IdeviceError::UnexpectedResponse("UniqueChipID not an integer".into()))
-    }
 }
 
 pub async fn device_info(client: &mut LockdownClient) -> Result<DeviceInfo, IdeviceError> {

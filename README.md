@@ -10,8 +10,8 @@ A cross-platform GUI for creating iOS pairing files, over USB or over Wi-Fi.
 - **Two destinations**: save the file to disk, or write it straight into an app's
   Documents directory over AFC
 - **Validation**: check that a file you just created actually works
-- **Device state**: developer mode, developer disk image mounting, and wireless
-  debugging (enabled over USB so the device can be reached over Wi-Fi later)
+- **Device state**: developer mode and wireless debugging (enabled over USB so
+  the device can be reached over Wi-Fi later)
 
 Apps with a known pairing file location:
 

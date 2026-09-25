@@ -51,7 +51,6 @@ pub struct Page {
     pub info: Task<DeviceInfo>,
     pub wireless_debugging: Task<bool>,
     pub developer_mode: Task<bool>,
-    pub developer_image: Task<bool>,
     pub kind: PairingKind,
     pub stored_record: bool,
     pub pairing: Task<PairingResult>,
@@ -214,7 +213,6 @@ impl App {
                 let task = match check {
                     Check::WirelessDebugging => &mut page.wireless_debugging,
                     Check::DeveloperMode => &mut page.developer_mode,
-                    Check::DeveloperImage => &mut page.developer_image,
                 };
                 *task = Task::Done(result);
             }
