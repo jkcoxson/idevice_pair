@@ -57,14 +57,9 @@ jobs:
             usbmuxd
 
       - name: Cache Cargo
-        uses: actions/cache@v5
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: linux-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: linux-cargo-
+          key: ${{ matrix.target }}
 
       - name: Build binary
         run: cargo build --release --bin ${{ env.BINARY_NAME }} --target ${{ matrix.target }}
@@ -126,14 +121,9 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Cache Cargo
-        uses: actions/cache@v5
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: windows-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: windows-cargo-
+          key: ${{ matrix.target }}
 
       - name: Build binary
         shell: bash
@@ -170,14 +160,9 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Cache Cargo
-        uses: actions/cache@v5
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{matrix.target}}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: macos-cargo-
+          key: ${{ matrix.target }}
 
       - name: Build ${{ matrix.arch }} slice
         run: |
