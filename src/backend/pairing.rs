@@ -1,8 +1,8 @@
 use super::{DeviceKey, Events, host_label, link::Link};
 use idevice::{
-    IdeviceError, RemoteXpcClient,
+    IdeviceError, IdeviceService, RemoteXpcClient,
     pairing_file::PairingFile,
-    remote_pairing::{RemotePairingClient, RpPairingFile},
+    remote_pairing::{RemotePairingClient, RemotePairingLockdownService, RpPairingFile},
 };
 
 const RP_FILE_NAME: &str = "pairingFile.plist";
@@ -86,19 +86,26 @@ pub async fn stored_lockdown_file(udid: &str) -> Result<PairingFile, IdeviceErro
     Ok(file)
 }
 
+/// Pairs over remotepairingdeviced's lockdown channel. The device already
+/// trusts this computer through lockdown, so it doesn't ask again.
 pub async fn remote_file(
-    link: &mut Link,
+    link: &Link,
     events: &Events,
     key: &DeviceKey,
 ) -> Result<RpPairingFile, IdeviceError> {
+    let Link::Usbmuxd { provider, .. } = link else {
+        return Err(IdeviceError::ServiceNotFound);
+    };
+
     let mut file = RpPairingFile::generate(host_label());
     for message in [
-        "Trust this computer on your device",
+        "Pairing through lockdown",
         "Saving the pairing on the device",
     ] {
         events.progress(key, message);
-        tunnel_service_client(link)
+        RemotePairingLockdownService::connect(provider)
             .await?
+            .into_client(host_label())?
             .connect(&mut file, || async { "000000".to_string() })
             .await?;
     }

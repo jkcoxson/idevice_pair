@@ -272,8 +272,8 @@ impl Worker {
                 if let Source::Remote(pairing_file) = &state.source {
                     Ok(Payload::Remote(pairing_file.clone()))
                 } else {
-                    let mut tunnel = state.tunnel(&self.events, key).await?;
-                    pairing::remote_file(&mut tunnel, &self.events, key)
+                    let link = state.link().await?;
+                    pairing::remote_file(&link, &self.events, key)
                         .await
                         .map(|file| Payload::Remote(Box::new(file)))
                 }
