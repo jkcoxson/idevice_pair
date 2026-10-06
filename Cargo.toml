@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.95"
 
 [dependencies]
-idevice = { version = "0.1.68", features = [
+idevice = { version = "0.1.68", default-features = false, features = [
   "afc",
   "core_device_proxy",
   "house_arrest",
@@ -13,6 +13,7 @@ idevice = { version = "0.1.68", features = [
   "mdns",
   "pair",
   "remote_pairing",
+  "ring",
   "rsd",
   "tcp",
   "tunnel_tcp_stack",
