@@ -2,10 +2,10 @@
 name = "idevice_pair"
 version = "1.1.0"
 edition = "2024"
-rust-version = "1.92"
+rust-version = "1.95"
 
 [dependencies]
-idevice = { version = "0.1.65", features = [
+idevice = { version = "0.1.68", features = [
   "afc",
   "core_device_proxy",
   "house_arrest",
@@ -18,18 +18,18 @@ idevice = { version = "0.1.65", features = [
   "tunnel_tcp_stack",
   "usbmuxd",
 ] }
-eframe = "0.35.0"
+eframe = "0.36.2"
 rfd = "0.17"
-tokio = { version = "1.53", features = ["rt-multi-thread", "net", "sync", "time"] }
-futures-util = "0.3.33"
-mdns-sd = "0.20"
-uuid = { version = "1.24", features = ["v4"] }
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "net", "sync", "time"] }
+futures-util = "0.3.34"
+mdns-sd = "0.21"
+uuid = { version = "1.27", features = ["v4"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-eframe = { version = "0.35.0", features = ["glow"] }
-pollster = "0.4"
+eframe = { version = "0.36.2", features = ["glow"] }
+pollster = "1.0"
 
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"
