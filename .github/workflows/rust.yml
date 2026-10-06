@@ -6,7 +6,7 @@ on:
       - master
     tags:
       - "v*.*.*"
-
+  workflow_dispatch: 
   pull_request:
 
 env:
