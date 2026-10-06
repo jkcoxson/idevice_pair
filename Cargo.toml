@@ -33,3 +33,8 @@ pollster = "1.0"
 
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = true
