@@ -19,6 +19,9 @@ pub fn picker(app: &mut App, ui: &mut Ui) {
         .selected_text(selected_text)
         .width(280.0)
         .show_ui(ui, |ui| {
+            if app.devices.is_empty() && app.apple_tvs.is_empty() {
+                ui.label("No devices found");
+            }
             for device in &app.devices {
                 if ui
                     .selectable_label(app.selected.as_ref() == Some(&device.key), label(device))
