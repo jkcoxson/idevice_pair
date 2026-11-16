@@ -265,6 +265,16 @@ impl eframe::App for App {
         while let Ok(event) = self.events.try_recv() {
             self.handle(event);
         }
+
+        #[cfg(target_os = "macos")]
+        if _ctx.input(|input| input.viewport().close_requested()) {
+            // Keep the native view alive until AppKit quits to avoid a Touch Bar observer crash report.
+            _ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            dispatch2::DispatchQueue::main().exec_async(|| {
+                let mtm = objc2::MainThreadMarker::new().expect("running on the main queue");
+                objc2_app_kit::NSApplication::sharedApplication(mtm).terminate(None);
+            });
+        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {

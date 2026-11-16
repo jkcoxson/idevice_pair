@@ -1995,10 +1995,13 @@ dependencies = [
 name = "idevice_pair"
 version = "1.1.0"
 dependencies = [
+ "dispatch2",
  "eframe",
  "futures-util",
  "idevice",
  "mdns-sd",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
  "pollster 1.0.1",
  "rfd",
  "tokio",

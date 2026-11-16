@@ -29,7 +29,10 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+dispatch2 = "0.3"
 eframe = { version = "0.36.2", features = ["glow"] }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSApplication", "NSResponder"] }
 pollster = "1.0"
 
 [target.'cfg(windows)'.build-dependencies]
