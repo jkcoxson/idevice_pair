@@ -56,6 +56,33 @@ pub struct DeviceInfo {
     pub udid: String,
 }
 
+impl DeviceInfo {
+    pub fn platform(&self) -> &'static str {
+        if self.model.starts_with("iPad") {
+            let major = self
+                .version
+                .split('.')
+                .next()
+                .and_then(|value| value.parse::<u32>().ok());
+            if major.is_some_and(|major| major < 13) {
+                "iOS"
+            } else {
+                "iPadOS"
+            }
+        } else if self.model.starts_with("iPhone") || self.model.starts_with("iPod") {
+            "iOS"
+        } else if self.model.starts_with("AppleTV") {
+            "tvOS"
+        } else if self.model.starts_with("Watch") {
+            "watchOS"
+        } else if self.model.starts_with("RealityDevice") {
+            "visionOS"
+        } else {
+            "OS"
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AppleTv {
     pub name: String,

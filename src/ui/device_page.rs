@@ -66,7 +66,7 @@ fn header(name: &str, page: &Page, ui: &mut Ui) {
             "device_info",
             &[
                 ("Model", &info.model),
-                ("iOS", &info.version),
+                (info.platform(), &info.version),
                 ("UDID", &info.udid),
             ],
         );
