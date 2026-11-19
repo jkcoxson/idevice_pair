@@ -28,6 +28,7 @@ Apps with a known pairing file location:
 - [Auto Capture](https://apps.apple.com/us/app/dev-auto-capture/id6755616902)
 - [StosDebug](https://github.com/stossy11/StosDebug)
 - [StikStore](https://stikstore.app/)
+- [MochiLog](https://github.com/MochiLog/MochiLog)
 
 ## Prerequisites
 
